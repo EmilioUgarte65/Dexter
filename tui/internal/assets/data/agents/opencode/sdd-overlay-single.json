@@ -1,0 +1,22 @@
+{
+  "comment": "Dexter SDD overlay for OpenCode — single model mode",
+  "sdd": {
+    "mode": "single",
+    "model": "auto",
+    "persistence": "engram"
+  },
+  "mcpServers": {
+    "engram": {
+      "command": "engram",
+      "args": ["mcp", "--tools=agent"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  },
+  "hooks": {
+    "onSessionStart": "engram mcp --tools=agent &",
+    "onSessionEnd": "# run mem_session_summary"
+  }
+}

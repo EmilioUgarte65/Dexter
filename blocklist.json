@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "description": "Dexter plugin blocklist — skills and patterns that must never be installed or executed",
+  "updatedAt": "2026-03-22",
+
+  "blockedSlugs": [
+    "cryptominer",
+    "coinminer",
+    "xmrig",
+    "monero-miner",
+    "keylogger",
+    "keylog",
+    "reverse-shell",
+    "backdoor",
+    "rootkit",
+    "stealer",
+    "credential-stealer",
+    "exfiltrator",
+    "data-exfil",
+    "rat",
+    "remote-access-trojan"
+  ],
+
+  "blockedPatterns": [
+    {
+      "pattern": "crypto.*min",
+      "description": "Cryptocurrency miner",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "xmr.*wallet|monero.*mine",
+      "description": "Monero mining",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "/dev/tcp/\\d+\\.\\d+",
+      "description": "Reverse shell via /dev/tcp",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "nc\\s+-e\\s+/bin/(sh|bash)",
+      "description": "Netcat reverse shell",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "bash.*-i.*>&.*/dev/tcp",
+      "description": "Bash reverse shell",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "curl.*\\|\\s*(bash|sh)\\b",
+      "description": "Remote code execution via curl pipe",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "wget.*\\|\\s*(bash|sh)\\b",
+      "description": "Remote code execution via wget pipe",
+      "severity": "CRITICAL"
+    },
+    {
+      "pattern": "base64\\s+(--decode|-d)\\s*\\|\\s*(bash|sh|python|node)",
+      "description": "Base64-encoded payload execution",
+      "severity": "CRITICAL"
+    }
+  ],
+
+  "suspiciousMetadataFlags": [
+    {
+      "flag": "no_description",
+      "description": "Skill has empty or missing description — cannot audit intent",
+      "action": "WARN"
+    },
+    {
+      "flag": "requires_root",
+      "description": "Skill requests root/sudo access without documented reason",
+      "action": "HIGH"
+    },
+    {
+      "flag": "no_author",
+      "description": "Skill has no author field in metadata",
+      "action": "WARN"
+    },
+    {
+      "flag": "unlicensed",
+      "description": "Skill has no license field",
+      "action": "WARN"
+    },
+    {
+      "flag": "no_allowed_tools",
+      "description": "Skill does not declare allowed-tools — cannot restrict permissions",
+      "action": "WARN"
+    }
+  ],
+
+  "trustedSources": [
+    "dexter",
+    "gentleman-programming",
+    "clawhub-verified"
+  ],
+
+  "notes": [
+    "Blocklist is checked before any community skill installation via openclaw-adapter",
+    "Entries in blockedSlugs are exact slug matches (case-insensitive)",
+    "Entries in blockedPatterns are regex patterns matched against skill script content",
+    "suspiciousMetadataFlags trigger warnings but do not block by default (except requires_root)",
+    "To report a new dangerous skill: mem_save to Engram with type=security and title=Blocklist: {slug}"
+  ]
+}

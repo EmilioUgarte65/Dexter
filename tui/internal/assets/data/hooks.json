@@ -1,0 +1,32 @@
+{
+  "description": "Dexter lifecycle hooks — applied via agent overlay.json",
+  "hooks": {
+    "SessionStart": {
+      "description": "Start Engram MCP, load session context, announce Dexter is ready",
+      "commands": [
+        {
+          "id": "engram-mcp-start",
+          "command": "engram mcp --tools=agent &",
+          "description": "Start Engram MCP server in background"
+        }
+      ],
+      "agentInstructions": "On session start: call mem_context to load recent session history. Read CAPABILITIES.md if not already in context. Announce available capabilities briefly."
+    },
+    "SubagentStop": {
+      "description": "Passive memory capture when a sub-agent finishes",
+      "agentInstructions": "After any sub-agent completes: call mem_capture_passive to save any important discoveries the sub-agent may have made. Check if sub-agent returned significant findings that should be persisted."
+    },
+    "Stop": {
+      "description": "Session end — mandatory memory summary",
+      "agentInstructions": "Before ending session: MANDATORY — call mem_session_summary with sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. This is NOT optional."
+    },
+    "PostCompact": {
+      "description": "Context compaction recovery",
+      "agentInstructions": "After compaction: (1) call mem_session_summary with the compacted content to preserve pre-compaction work. (2) call mem_context to recover session history. (3) Only then continue working. Do NOT skip step 1."
+    }
+  },
+  "claudeCode": {
+    "hookFormat": "settings.json > hooks array",
+    "note": "Claude Code hooks are configured in ~/.claude/settings.json via overlay.json merge"
+  }
+}

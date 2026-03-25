@@ -1,0 +1,10 @@
+{
+  "command": "engram",
+  "args": ["mcp", "--tools=agent"],
+  "description": "Engram persistent memory MCP server — SQLite + FTS5, cross-session memory for Dexter",
+  "install": {
+    "brew": "engram",
+    "go": "github.com/nicholasgasior/engram@latest",
+    "docs": "https://engram.sh"
+  }
+}

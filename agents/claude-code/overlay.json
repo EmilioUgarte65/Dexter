@@ -1,0 +1,62 @@
+{
+  "outputStyle": "Dexter",
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "engram mcp --tools=agent &",
+        "description": "Start Engram MCP server"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "type": "command",
+        "command": "echo '[Dexter] Subagent stopped — mem_capture_passive triggered'",
+        "description": "Passive memory capture after subagent"
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "echo '[Dexter] Session ending — run mem_session_summary'",
+        "description": "Trigger session summary on stop"
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(engram:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(python3:*)",
+      "Bash(pip3:*)",
+      "Bash(brew:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "mcp__plugin_engram_engram__mem_save",
+      "mcp__plugin_engram_engram__mem_search",
+      "mcp__plugin_engram_engram__mem_context",
+      "mcp__plugin_engram_engram__mem_session_summary",
+      "mcp__plugin_engram_engram__mem_get_observation",
+      "mcp__plugin_engram_engram__mem_update",
+      "mcp__plugin_engram_engram__mem_capture_passive"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(dd if=/dev/zero of=/dev/sd*)",
+      "Bash(mkfs /dev/*)",
+      "Bash(:(){ :|:& };:)"
+    ]
+  },
+  "mcpServers": {
+    "engram": {
+      "command": "engram",
+      "args": ["mcp", "--tools=agent"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}

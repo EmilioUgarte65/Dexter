@@ -1,0 +1,41 @@
+{
+  "comment": "Dexter SDD overlay for OpenCode — multi-model mode. Each SDD phase uses a different model.",
+  "sdd": {
+    "mode": "multi",
+    "persistence": "engram",
+    "phaseModels": {
+      "sdd-init":    "claude-opus-4-6",
+      "sdd-explore": "claude-sonnet-4-6",
+      "sdd-propose": "claude-sonnet-4-6",
+      "sdd-spec":    "claude-sonnet-4-6",
+      "sdd-design":  "claude-opus-4-6",
+      "sdd-tasks":   "claude-sonnet-4-6",
+      "sdd-apply":   "claude-sonnet-4-6",
+      "sdd-verify":  "claude-sonnet-4-6",
+      "sdd-archive": "claude-haiku-4-5-20251001"
+    }
+  },
+  "mcpServers": {
+    "engram": {
+      "command": "engram",
+      "args": ["mcp", "--tools=agent"]
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  },
+  "models": {
+    "routing": {
+      "complex": "anthropic/claude-sonnet-4-6",
+      "simple": "ollama/llama3.2",
+      "code": "anthropic/claude-sonnet-4-6",
+      "local_only": "ollama/llama3.2"
+    },
+    "rules": [
+      "Use simple model for: file listing, grep, summarize short text, format code",
+      "Use complex model for: architecture, security audit, multi-file analysis, SDD phases",
+      "Use local_only for: anything containing API keys, passwords, PII, or internal hostnames"
+    ]
+  }
+}

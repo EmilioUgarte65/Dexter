@@ -1,0 +1,9 @@
+{
+  "command": "npx",
+  "args": ["-y", "@upstash/context7-mcp"],
+  "description": "Context7 MCP — real-time library documentation lookup. Resolves 'use context7' requests.",
+  "install": {
+    "npm": "@upstash/context7-mcp",
+    "docs": "https://context7.com"
+  }
+}

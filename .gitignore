@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+*.token
+token.json
+credentials.json
+
+# OAuth tokens
+gmail_token.json
+*_token.json
+
+# Dexter runtime
+~/.local/share/dexter/
+
+# ClawHub
+.clawhub/lock.json
+.clawhub/*.session
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# External reference repos (cloned locally, not part of Dexter source)
+gentle-ai/
+openclaw/
