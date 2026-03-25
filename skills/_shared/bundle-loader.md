@@ -32,6 +32,8 @@ When a trigger keyword is detected:
 ```
 communications → whatsapp | telegram | signal | slack | discord | teams | imessage
                  mensaje | chat | notificación | mensajería | enviar mensaje
+                 persona whatsapp | cómo responder mensajes | auto-responder | responder por mí
+                 → also load: skills/communications/whatsapp/persona/SKILL.md
 
 email          → email | gmail | outlook | correo | bandeja | inbox | mail
 
