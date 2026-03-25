@@ -95,7 +95,25 @@ python3 ~/.claude/skills/notifications/scripts/notify.py \
    { "channel": "telegram", "telegram": { "bot_token": "...", "chat_id": "..." } }
    ```
 
-## Setup — WhatsApp
+## Setup — YCloud (WhatsApp Business API)
+
+1. Entrás a [ycloud.com](https://www.ycloud.com) → Console → **Developers > API Keys** → copiás tu API key
+2. Necesitás tu número de WhatsApp Business registrado en YCloud (`from`)
+3. Editás `~/.dexter/notifications.json`:
+   ```json
+   {
+     "channel": "ycloud",
+     "ycloud": {
+       "api_key": "TU_API_KEY",
+       "from": "+1234567890",
+       "to": "+1234567890"
+     }
+   }
+   ```
+
+> **Nota**: el número `to` es tu propio número o el que quieras notificar. Formato E.164 (`+` + código de país).
+
+## Setup — WhatsApp (Baileys — self-hosted)
 
 Requires a running [Baileys](https://github.com/WhiskeySockets/Baileys) HTTP API server:
 ```bash

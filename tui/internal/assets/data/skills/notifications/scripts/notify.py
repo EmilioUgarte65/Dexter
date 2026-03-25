@@ -128,9 +128,27 @@ def send_discord(cfg: dict, message: str) -> bool:
     return _http_post(webhook, {"content": message})
 
 
+def send_ycloud(cfg: dict, message: str) -> bool:
+    yc = cfg.get("ycloud", {})
+    api_key = yc.get("api_key") or os.environ.get("YCLOUD_API_KEY", "")
+    from_number = yc.get("from", "")
+    to_number = yc.get("to", "")
+    if not api_key or not from_number or not to_number:
+        print("notify: ycloud missing api_key, from, or to", file=sys.stderr)
+        return False
+    url = "https://api.ycloud.com/v2/whatsapp/messages/sendDirectly"
+    return _http_post(url, {
+        "from": from_number,
+        "to": to_number,
+        "type": "text",
+        "text": {"body": message},
+    }, headers={"X-API-Key": api_key})
+
+
 SENDERS = {
     "telegram": send_telegram,
     "whatsapp": send_whatsapp,
+    "ycloud": send_ycloud,
     "slack": send_slack,
     "discord": send_discord,
 }
