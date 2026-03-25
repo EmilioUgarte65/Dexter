@@ -33,6 +33,7 @@
 | Source | How to use |
 |--------|-----------|
 | ClawHub / OpenClaw skills | `openclaw-adapter` — mention "instalar skill de clawhub" |
+| ClawFlows workflows (112+) | `clawflows-adapter` — when user wants a recurring automation. 112 pre-built workflows covering: morning briefing, email triage, standup generator, smart home (sleep/focus/away mode), PR review, meal planning, habit tracking, trip prep, meeting prep, expense reports, and more. **If the user asks to automate something recurring, check ClawFlows first before building from scratch.** |
 | gentle-ai plugins | Auto-detected if gentle-ai is installed |
 
 ## Cross-Platform Support
