@@ -1,0 +1,14 @@
+{
+  "name": "dexter-whatsapp-server",
+  "version": "1.0.0",
+  "description": "Minimal Baileys HTTP server for Dexter — QR pairing, no Meta Business account required",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.9",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

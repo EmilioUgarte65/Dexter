@@ -239,6 +239,58 @@ setup_notifications() {
   fi
 }
 
+# ─── WhatsApp server setup ─────────────────────────────────────────────────────
+setup_whatsapp() {
+  local server_dir="$DEXTER_SOURCE_DIR/skills/communications/whatsapp/server"
+  local config_file="$HOME/.dexter/notifications.json"
+
+  [[ ! -f "$server_dir/package.json" ]] && return
+
+  if [[ "$NODE_AVAILABLE" == false ]]; then
+    warn "  WhatsApp server requires Node.js — skipped. Install Node.js and run: bash $server_dir/start.sh"
+    return
+  fi
+
+  [[ "$DRY_RUN" == true ]] && { info "[dry-run] Would set up WhatsApp server at $server_dir"; return; }
+
+  echo ""
+  echo -e "${BOLD}Do you want to set up WhatsApp notifications? (any regular WhatsApp number, no Meta account needed)${RESET}"
+  read -rp "$(echo -e "${YELLOW}[Dexter]${RESET} Set up WhatsApp? [y/N] ")" answer
+
+  if [[ "${answer,,}" != "y" ]]; then
+    info "  Skipping WhatsApp setup. Run later: bash $server_dir/start.sh"
+    return
+  fi
+
+  info "Installing WhatsApp server dependencies..."
+  (cd "$server_dir" && npm install --silent)
+  success "  Dependencies installed."
+
+  # Update notifications.json to use whatsapp channel
+  read -rp "$(echo -e "${YELLOW}[Dexter]${RESET} Your phone number to receive notifications (e.g. +5491112345678): ")" wa_phone
+  if [[ -n "$wa_phone" ]] && [[ -f "$config_file" ]]; then
+    if [[ "$NODE_AVAILABLE" == true ]]; then
+      node -e "
+        const fs = require('fs');
+        const cfg = JSON.parse(fs.readFileSync('$config_file','utf8'));
+        cfg.channel = 'whatsapp';
+        cfg.whatsapp = cfg.whatsapp || {};
+        cfg.whatsapp.api_url = 'http://localhost:3000';
+        cfg.whatsapp.phone = '$wa_phone';
+        fs.writeFileSync('$config_file', JSON.stringify(cfg, null, 2));
+      "
+      success "  Notifications config updated → channel: whatsapp, phone: $wa_phone"
+    fi
+  fi
+
+  echo ""
+  success "WhatsApp server ready!"
+  info "  Start it with: bash $server_dir/start.sh"
+  info "  First time: scan the QR code with WhatsApp → Settings → Linked Devices → Link a Device"
+  info "  Background: bash $server_dir/start.sh --background"
+  echo ""
+}
+
 # ─── Configure MCPs ─────────────────────────────────────────────────────────────
 configure_mcps() {
   local agent="$1"
@@ -414,6 +466,9 @@ main() {
 
   header "Step 3b: Notifications Config"
   setup_notifications
+
+  header "Step 3c: WhatsApp Server (optional)"
+  setup_whatsapp
 
   header "Step 4: MCPs"
   configure_mcps "$agent" "$SETTINGS_FILE" "$SETTINGS_STRATEGY"

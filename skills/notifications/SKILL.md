@@ -113,13 +113,38 @@ python3 ~/.claude/skills/notifications/scripts/notify.py \
 
 > **Nota**: el número `to` es tu propio número o el que quieras notificar. Formato E.164 (`+` + código de país).
 
-## Setup — WhatsApp (Baileys — self-hosted)
+## Setup — WhatsApp (Baileys — cualquier número, sin cuenta Meta)
 
-Requires a running [Baileys](https://github.com/WhiskeySockets/Baileys) HTTP API server:
+Dexter incluye un servidor Baileys mínimo. Funciona con cualquier número regular de WhatsApp — solo escaneás un QR una vez.
+
+### Primera vez (QR pairing)
+
 ```bash
-# Already handled if you have Dexter's WhatsApp skill configured
+bash ~/.claude/skills/communications/whatsapp/server/start.sh
 ```
-Set `channel: "whatsapp"` and `phone: "+1234567890"` in the config.
+
+Aparece el QR en la terminal. En tu teléfono: **WhatsApp → Configuración → Dispositivos vinculados → Vincular dispositivo**. Escaneás y listo — las credenciales quedan en `~/.dexter/whatsapp/` para siempre.
+
+### Inicio en background (arranque normal)
+
+```bash
+bash ~/.claude/skills/communications/whatsapp/server/start.sh --background
+# Logs: tail -f ~/.dexter/whatsapp-server.log
+```
+
+### Config en `~/.dexter/notifications.json`
+
+```json
+{
+  "channel": "whatsapp",
+  "whatsapp": {
+    "api_url": "http://localhost:3000",
+    "phone": "+5491112345678"
+  }
+}
+```
+
+> El installer (`bash install.sh`) ofrece hacer todo esto automáticamente en el **Step 3c**.
 
 ## Setup — Slack / Discord
 
