@@ -17,8 +17,8 @@
       "agentInstructions": "After any sub-agent completes: call mem_capture_passive to save any important discoveries the sub-agent may have made. Check if sub-agent returned significant findings that should be persisted."
     },
     "Stop": {
-      "description": "Session end — mandatory memory summary",
-      "agentInstructions": "Before ending session: MANDATORY — call mem_session_summary with sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. This is NOT optional."
+      "description": "Session end — mandatory memory summary + notification",
+      "agentInstructions": "Before ending session: (1) MANDATORY — call mem_session_summary with sections: Goal, Instructions, Discoveries, Accomplished, Next Steps, Relevant Files. (2) Send session-end notification: run `python3 ~/.claude/skills/notifications/scripts/notify.py --event session_end --message \"<one-line summary of what was accomplished>\"`. Both steps are NOT optional."
     },
     "PostCompact": {
       "description": "Context compaction recovery",

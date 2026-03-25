@@ -18,8 +18,8 @@
     "Stop": [
       {
         "type": "command",
-        "command": "echo '[Dexter] Session ending — run mem_session_summary'",
-        "description": "Trigger session summary on stop"
+        "command": "python3 ~/.claude/skills/notifications/scripts/notify.py --event session_end --message 'Session ended' 2>/dev/null || true",
+        "description": "Send session-end notification (silent if not configured)"
       }
     ]
   },

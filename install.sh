@@ -217,6 +217,28 @@ copy_skills() {
   success "Skills installed"
 }
 
+# ─── Notifications config ──────────────────────────────────────────────────────
+setup_notifications() {
+  local config_dir="$HOME/.dexter"
+  local config_file="$config_dir/notifications.json"
+  local template="$DEXTER_SOURCE_DIR/notifications/config.template.json"
+
+  [[ ! -f "$template" ]] && return
+
+  info "Setting up notifications config ..."
+  [[ "$DRY_RUN" == true ]] && { info "[dry-run] Would create $config_file if not exists"; return; }
+
+  mkdir -p "$config_dir"
+
+  if [[ -f "$config_file" ]]; then
+    info "  Notifications config already exists — skipping ($config_file)"
+  else
+    cp "$template" "$config_file"
+    success "  Created: $config_file"
+    info "  Edit $config_file to enable Telegram, WhatsApp, Slack, or Discord notifications."
+  fi
+}
+
 # ─── Configure MCPs ─────────────────────────────────────────────────────────────
 configure_mcps() {
   local agent="$1"
@@ -389,6 +411,9 @@ main() {
 
   header "Step 3: Skills"
   copy_skills "$SKILLS_DIR"
+
+  header "Step 3b: Notifications Config"
+  setup_notifications
 
   header "Step 4: MCPs"
   configure_mcps "$agent" "$SETTINGS_FILE" "$SETTINGS_STRATEGY"

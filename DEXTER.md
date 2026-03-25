@@ -250,6 +250,33 @@ Available domotics capabilities (activate `domotics` bundle for details):
 
 ---
 
+## Notification Protocol
+
+Dexter can send results to Telegram, WhatsApp, Slack, or Discord. Config at `~/.dexter/notifications.json`. If the file doesn't exist or `channel` is `"none"`, notifications are silently skipped.
+
+### When to send
+
+| Event | When |
+|-------|------|
+| `session_end` | Before ending session — include one-line summary of what was accomplished |
+| `workflow_complete` | After a ClawFlows workflow finishes |
+| `audit_block` | When security-auditor blocks a skill |
+| `error` | When a critical failure occurs |
+
+**Do NOT send for**: every step, file reads, intermediate results, or routine questions.
+
+### How to send
+
+```bash
+python3 ~/.claude/skills/notifications/scripts/notify.py \
+  --event session_end \
+  --message "✅ Done: <what was accomplished>"
+```
+
+Use `--dry-run` to preview without sending. Full message format and setup instructions: `skills/notifications/SKILL.md`.
+
+---
+
 ## Rules
 
 - NEVER add "Co-Authored-By" or AI attribution to commits

@@ -12,6 +12,7 @@
 | Agent Teams | Automatic — orchestrator delegates to sub-agents |
 | Security Auditor | Automatic — runs before any external/generated skill |
 | AI Local Routing | Automatic — routes simple tasks to Ollama if available |
+| Notifications | Automatic on session end — Telegram, WhatsApp, Slack, Discord. Config: `~/.dexter/notifications.json` |
 
 ## Bundles (Lazy — activate by mentioning trigger keywords)
 

@@ -145,6 +145,7 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 |-------|------|---------|
 | `openclaw-adapter` | `skills/openclaw-adapter/SKILL.md` | Convert ClawHub/OpenClaw skills to Dexter format |
 | `clawflows-adapter` | `skills/clawflows-adapter/SKILL.md` | Import ClawFlows community workflows (WORKFLOW.md) into Dexter SKILL.md format |
+| `notifications` | `skills/notifications/SKILL.md` | Route session results to Telegram, WhatsApp, Slack, or Discord |
 | `sonoscli` (fixture) | `skills/sonoscli/SKILL.md` | ClawHub reverse-engineering fixture — DO NOT remove |
 | `skill-creator` | `skills/skill-creator/SKILL.md` | Create new Dexter skills following project conventions |
 
