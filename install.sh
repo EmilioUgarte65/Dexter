@@ -283,6 +283,28 @@ setup_whatsapp() {
     fi
   fi
 
+  # Setup persona for auto-responder
+  local persona_file="$HOME/.dexter/whatsapp-persona.json"
+  local persona_template="$DEXTER_SOURCE_DIR/notifications/whatsapp-persona.template.json"
+
+  if [[ ! -f "$persona_file" ]] && [[ -f "$persona_template" ]]; then
+    echo ""
+    echo -e "${BOLD}WhatsApp Persona — auto-responder for unknown numbers${RESET}"
+    echo -e "  When someone messages you and they're not in your allowFrom list,"
+    echo -e "  Dexter will respond on your behalf using your persona config."
+    echo ""
+    read -rp "$(echo -e "${YELLOW}[Dexter]${RESET} Set up your WhatsApp persona now? [y/N] ")" persona_answer
+
+    if [[ "${persona_answer,,}" == "y" ]]; then
+      cp "$persona_template" "$persona_file"
+      success "  Created: $persona_file"
+      info "  Edit it to personalize how Dexter responds on your behalf."
+      info "  Or ask Dexter: 'configurá mi persona de WhatsApp'"
+    else
+      info "  Skipping persona. Set up later: ask Dexter 'configurá mi persona de WhatsApp'"
+    fi
+  fi
+
   echo ""
   success "WhatsApp server ready!"
   info "  Start it with: bash $server_dir/start.sh"
