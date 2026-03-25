@@ -23,7 +23,19 @@ const path = require('path')
 const qrcode = require('qrcode-terminal')
 
 const AUTH_DIR = path.join(os.homedir(), '.dexter', 'whatsapp')
+const CONFIG_PATH = path.join(os.homedir(), '.dexter', 'notifications.json')
 const PORT = parseInt(process.env.WA_PORT || '3000', 10)
+
+// ─── Config loader ────────────────────────────────────────────────────────────
+
+function loadConfig() {
+  try {
+    const raw = require('fs').readFileSync(CONFIG_PATH, 'utf8')
+    return JSON.parse(raw)
+  } catch (_) {
+    return {}
+  }
+}
 
 let sock = null
 let isReady = false
@@ -52,6 +64,14 @@ function startHttpServer() {
           if (!to || !text) {
             res.writeHead(400, { 'Content-Type': 'application/json' })
             return res.end(JSON.stringify({ ok: false, error: 'missing to or text' }))
+          }
+
+          // ─── Access policy check ────────────────────────────────────────
+          const cfg = loadConfig()
+          const allowFrom = cfg.whatsapp?.allowFrom || []
+          if (allowFrom.length > 0 && !allowFrom.includes(to)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' })
+            return res.end(JSON.stringify({ ok: false, error: 'recipient not in allowFrom list' }))
           }
           await sock.sendMessage(toJid(to), { text })
           res.writeHead(200, { 'Content-Type': 'application/json' })

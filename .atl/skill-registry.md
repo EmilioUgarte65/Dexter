@@ -50,7 +50,8 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 | `knowledge` | `skills/knowledge/` | personal-kb, meeting-transcription | Obsidian, nota, vault, transcribir reunión |
 | `domotics` | `skills/domotics/` | home-assistant, mqtt, philips-hue, device-discovery | hogar, Home Assistant, MQTT, Hue, IoT |
 | `security` | `skills/security/` | security-auditor, virustotal, linux-security-tools, hardening-check | seguridad, auditoría, nmap, VirusTotal |
-| `ai` | `skills/ai/` | ollama-router, token-optimizer | Ollama, modelo local, optimizar tokens |
+| `ai` | `skills/ai/` | ollama-router, token-optimizer, llm-router | Ollama, modelo local, optimizar tokens, fallback LLM, proveedor |
+| `infrastructure` | `skills/infrastructure/` | webhooks | webhook, cron job, sistema |
 | `self-extend` | `skills/self-extend/` | skill-hot-reload, skill-modifier | nueva skill, hot-reload, extender Dexter |
 | `dev` | `skills/dev/` | sentry, self-correct-loop | sentry, error, crash, exception, bug report, self-correct, fix until it works, iterate until green |
 
@@ -125,6 +126,12 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 |-------|------|
 | `ollama-router` | `skills/ai/ollama-router/SKILL.md` |
 | `token-optimizer` | `skills/ai/token-optimizer/SKILL.md` |
+| `llm-router` | `skills/ai/llm-router/SKILL.md` |
+
+#### infrastructure
+| Skill | Path |
+|-------|------|
+| `webhooks` | `skills/infrastructure/webhooks/SKILL.md` |
 
 #### self-extend
 | Skill | Path |
@@ -164,7 +171,7 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 
 ## Skill Count
 
-Total leaf skills with SKILL.md: **44**
+Total leaf skills with SKILL.md: **46**
 
 | # | Bundle | Skill |
 |---|--------|-------|
@@ -206,6 +213,8 @@ Total leaf skills with SKILL.md: **44**
 | 36 | security | hardening-check |
 | 37 | ai | ollama-router |
 | 38 | ai | token-optimizer |
+| 45 | ai | llm-router |
+| 46 | infrastructure | webhooks |
 | 39 | self-extend | skill-hot-reload |
 | 40 | self-extend | skill-modifier |
 | 41 | self-extend | self-correct-loop |

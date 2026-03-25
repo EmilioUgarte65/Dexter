@@ -1,0 +1,11 @@
+{
+  "_comment": "Dexter LLM Router Config — copy to ~/.dexter/llm-router.json",
+  "providers": [
+    {"name": "anthropic", "model": "claude-haiku-4-5-20251001", "priority": 1},
+    {"name": "openai", "model": "gpt-4o-mini", "priority": 2},
+    {"name": "google", "model": "gemini-1.5-flash", "priority": 3},
+    {"name": "ollama", "model": "llama3.2", "priority": 4, "base_url": "http://localhost:11434"}
+  ],
+  "fallback_on_error": true,
+  "log_usage": true
+}

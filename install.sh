@@ -291,6 +291,46 @@ setup_whatsapp() {
   echo ""
 }
 
+# ─── Webhooks & LLM Router setup ───────────────────────────────────────────────
+setup_webhooks() {
+  local config_dir="$HOME/.dexter"
+  local webhooks_file="$config_dir/webhooks.json"
+  local router_file="$config_dir/llm-router.json"
+  local webhooks_template="$DEXTER_SOURCE_DIR/notifications/webhooks.template.json"
+  local router_template="$DEXTER_SOURCE_DIR/notifications/llm-router.template.json"
+
+  [[ "$DRY_RUN" == true ]] && { info "[dry-run] Would set up webhooks and LLM router config"; return; }
+
+  mkdir -p "$config_dir"
+
+  # Webhooks config
+  if [[ -f "$webhooks_file" ]]; then
+    info "  Webhooks config already exists — skipping ($webhooks_file)"
+  else
+    echo "[]" > "$webhooks_file"
+    success "  Created: $webhooks_file (empty handlers list)"
+    if [[ -f "$webhooks_template" ]]; then
+      read -rp "$(echo -e "${YELLOW}[Dexter]${RESET} Copy example webhook handlers? [y/N] ")" answer
+      if [[ "${answer,,}" == "y" ]]; then
+        cp "$webhooks_template" "$webhooks_file"
+        success "  Example handlers copied to $webhooks_file"
+        info "  Edit $webhooks_file to configure your webhook paths and actions."
+      fi
+    fi
+  fi
+
+  # LLM Router config
+  if [[ -f "$router_file" ]]; then
+    info "  LLM router config already exists — skipping ($router_file)"
+  else
+    if [[ -f "$router_template" ]]; then
+      cp "$router_template" "$router_file"
+      success "  Created: $router_file"
+      info "  Edit $router_file to set your preferred providers and API keys."
+    fi
+  fi
+}
+
 # ─── Configure MCPs ─────────────────────────────────────────────────────────────
 configure_mcps() {
   local agent="$1"
@@ -469,6 +509,9 @@ main() {
 
   header "Step 3c: WhatsApp Server (optional)"
   setup_whatsapp
+
+  header "Step 3d: Webhooks & LLM Router"
+  setup_webhooks
 
   header "Step 4: MCPs"
   configure_mcps "$agent" "$SETTINGS_FILE" "$SETTINGS_STRATEGY"

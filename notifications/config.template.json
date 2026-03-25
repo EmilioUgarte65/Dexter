@@ -11,7 +11,9 @@
   "whatsapp": {
     "api_url": "http://localhost:3000",
     "session": "dexter",
-    "phone": "+1234567890"
+    "phone": "+1234567890",
+    "allowFrom": ["+1234567890"],
+    "dmPolicy": "allowlist"
   },
 
   "ycloud": {

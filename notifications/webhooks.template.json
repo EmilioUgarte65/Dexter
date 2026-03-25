@@ -1,0 +1,23 @@
+[
+  {
+    "id": "github-push",
+    "source": "github",
+    "path": "/webhook/github",
+    "secret": "",
+    "action": "python3 ~/.claude/skills/notifications/scripts/notify.py --event workflow_complete --message 'New push to GitHub repo'"
+  },
+  {
+    "id": "stripe-payment",
+    "source": "stripe",
+    "path": "/webhook/stripe",
+    "secret": "",
+    "action": "python3 ~/.claude/skills/notifications/scripts/notify.py --event workflow_complete --message 'New Stripe payment received'"
+  },
+  {
+    "id": "custom-alert",
+    "source": "custom",
+    "path": "/webhook/alert",
+    "secret": "",
+    "action": "echo 'Custom alert triggered'"
+  }
+]

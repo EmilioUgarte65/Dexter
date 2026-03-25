@@ -146,6 +146,22 @@ bash ~/.claude/skills/communications/whatsapp/server/start.sh --background
 
 > El installer (`bash install.sh`) ofrece hacer todo esto automáticamente en el **Step 3c**.
 
+### Access Policies (WhatsApp)
+
+Add to `~/.dexter/notifications.json` to restrict which numbers the bot can message:
+
+```json
+"whatsapp": {
+  "allowFrom": ["+5491112345678"],
+  "dmPolicy": "allowlist"
+}
+```
+
+| dmPolicy | Behavior |
+|----------|----------|
+| `open` | Can message any number |
+| `allowlist` | Only numbers in `allowFrom` |
+
 ## Setup — Slack / Discord
 
 Paste your incoming webhook URL under `slack.webhook_url` or `discord.webhook_url` and set `channel` accordingly.

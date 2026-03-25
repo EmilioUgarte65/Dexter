@@ -22,7 +22,8 @@
 | `productivity` | gmail, correo, email, github, issue, PR, cron, tarea programada, schedule, sistema, cpu, memoria, disco, elevenlabs, tts, voz, obsidian, nota, vault, gcloud, GCP, hetzner, VPS, calendar, agenda, evento, todoist, tarea, task, vuelo, flight, aeropuerto, airport, sentry, error tracking | gmail, github, system-monitor, cron, elevenlabs, obsidian, google-cloud, hetzner, calendar, todoist, travel, sentry |
 | `domotics` | hogar, Home Assistant, MQTT, Hue, luces, IoT, domótica, device discovery | home-assistant, mqtt, philips-hue, device-discovery |
 | `security` | seguridad, auditoría, nmap, VirusTotal, hardening | security-auditor, linux-security-tools, virustotal, hardening-check |
-| `ai` | ollama, modelo local, local model, llama, mistral, router, token optimizer, cuánto gasté, token usage, ahorro tokens | ollama-router, token-optimizer |
+| `ai` | ollama, modelo local, local model, llama, mistral, router, token optimizer, cuánto gasté, token usage, ahorro tokens, llm-router, proveedor, fallback LLM, cambiar modelo, backup model | ollama-router, token-optimizer, llm-router |
+| `infrastructure` | webhook, cron job, sistema | webhooks, cron, system-monitor |
 | `skill-creator` | crear skill, nueva skill, create skill, new skill, haz una skill, skill para X, documentar workflow, recipe | skill-creator |
 | `social` | twitter, tweet, X, hilo twitter, linkedin, post linkedin, contenido linkedin, instagram, ig, foto instagram, story instagram | twitter-x, linkedin, instagram |
 | `research` | navegar, web browser, screenshot, scrape, fetch url, buscar web, generar reporte, report, informe, documento, agregar datos, data aggregator, merge data, fetch api, consolidar datos | web-browser, report-generator, data-aggregator |
