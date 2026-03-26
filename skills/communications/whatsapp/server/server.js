@@ -285,7 +285,7 @@ async function connect() {
     version,
     auth: {
       creds: state.creds,
-      keys: makeCacheableSignalKeyStore(state.keys, { level: () => {} }),
+      keys: makeCacheableSignalKeyStore(state.keys, { trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{}, child: ()=>({ trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{} }) }),
     },
     printQRInTerminal: false,
     browser: Browsers.ubuntu('Chrome'),
