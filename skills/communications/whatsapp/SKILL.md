@@ -41,7 +41,7 @@ Create `~/.dexter/whatsapp-persona.json`:
 
 | Field | Description |
 |-------|-------------|
-| `allowFrom` | Your phone number(s). These get full AI responses. |
+| `allowFrom` | Your phone number(s). These get full AI responses. Use international format with `+`. |
 | `stranger_reply` | Fixed reply for unknown numbers. If omitted, strangers get an LLM response. |
 | `wake_word` | Word strangers must say to get a response (default: `"dexter"`). Set to `null` to disable. |
 | `allowedGroups` | List of group JIDs where Dexter responds. Managed via commands — see below. |
@@ -66,9 +66,18 @@ Credentials are saved in `~/.dexter/whatsapp/` — subsequent starts connect aut
 | Sender | Behavior |
 |--------|----------|
 | Numbers in `allowFrom` | Full Dexter AI response via `claude -p` subprocess |
+| Self-chat (own number) | Same as above — write to yourself and Dexter responds |
 | Unknown numbers | Ignored unless they say `"dexter"` — then gets `stranger_reply` |
 | Groups (not enabled) | Fully ignored |
 | Groups (enabled) | Responds when someone says `"dexter"` |
+
+### Phone number matching
+
+Numbers are matched by the **last 10 digits**, so country code variants are handled automatically. For example, Mexico uses `+5283...` but WhatsApp internally reports `+52183...` — both match correctly. You don't need to worry about this; just use the format printed on your SIM.
+
+### Self-chat
+
+Writing to your own number is the primary way to interact with Dexter. Messages you send to yourself (`fromMe: true`) are processed normally — Dexter responds in that same conversation.
 
 ### AI responses (owner)
 
