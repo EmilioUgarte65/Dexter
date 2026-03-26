@@ -460,7 +460,18 @@ async function connect() {
     for (const msg of messages) {
       if (msg.key.fromMe) continue
       if (msg.key.remoteJid === 'status@broadcast') continue
-      if (msg.key.remoteJid?.endsWith('@g.us')) continue
+      if (msg.key.remoteJid?.endsWith('@g.us')) {
+        // Groups: only respond if explicitly allowed in persona.allowedGroups
+        const allowedGroups = loadPersona()?.allowedGroups || []
+        if (!allowedGroups.includes(msg.key.remoteJid)) continue
+        // In groups, always require wake word
+        const wakeWord = loadPersona()?.wake_word !== undefined ? loadPersona().wake_word : 'dexter'
+        const groupText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
+        if (!groupText.trim()) continue
+        if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
+        await handleUnknownSender(msg.key.remoteJid, groupText)
+        continue
+      }
 
       const senderJid = msg.key.remoteJid
       const text = msg.message?.conversation
