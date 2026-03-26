@@ -23,7 +23,7 @@
  *   WA_PORT=3001 node server.js
  */
 
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const http = require('http')
 const https = require('https')
@@ -42,6 +42,14 @@ let sock = null
 let isReady = false
 let httpStarted = false
 let pairingRequested = false
+let waitingForPairing = false
+
+function waitForEnter(prompt) {
+  return new Promise(resolve => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+    rl.question(prompt, () => { rl.close(); resolve() })
+  })
+}
 
 // ─── Loaders ──────────────────────────────────────────────────────────────────
 
@@ -267,8 +275,10 @@ function startHttpServer() {
 async function connect() {
   fs.mkdirSync(AUTH_DIR, { recursive: true })
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
+  const { version } = await fetchLatestBaileysVersion()
 
   sock = makeWASocket({
+    version,
     auth: state,
     printQRInTerminal: false,
     browser: Browsers.ubuntu('Chrome'),
@@ -303,6 +313,9 @@ async function connect() {
         console.log('│  → Vincular con número de teléfono       │')
         console.log('│  → Ingresá el código de arriba           │')
         console.log('└─────────────────────────────────────────┘\n')
+        waitingForPairing = true
+        await waitForEnter('  ✅ Ingresaste el código en WhatsApp? Presioná Enter para continuar...\n')
+        waitingForPairing = false
       } catch (e) {
         console.error('[Dexter] Pairing code error:', e.message)
       }
@@ -321,6 +334,8 @@ async function connect() {
       if (code === DisconnectReason.loggedOut) {
         console.log('[Dexter] Logged out. Delete ~/.dexter/whatsapp/ and restart.')
         process.exit(0)
+      } else if (waitingForPairing) {
+        // Don't reconnect yet — user is still entering the code
       } else {
         console.log('[Dexter] Disconnected — reconnecting...')
         setTimeout(connect, 3000)
