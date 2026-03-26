@@ -67,6 +67,9 @@ bash uninstall.sh
 ## Key Features
 
 ### 🧠 Persistent Memory (Engram)
+
+> Powered by [Engram](https://github.com/Gentleman-Programming/engram) — persistent memory for AI agents.
+
 Cross-session memory powered by SQLite + FTS5. Dexter saves decisions, bugs, discoveries, and conventions automatically — no manual prompting required.
 
 ```
@@ -334,3 +337,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [Apache 2.0](LICENSE) — Copyright 2024 Dexter Contributors
+
+---
+
+## Acknowledgements
+
+Dexter is built on the shoulders of these projects:
+
+| Project | What it contributes |
+|---------|-------------------|
+| [Engram](https://github.com/Gentleman-Programming/engram) | Persistent cross-session memory — SQLite + FTS5 MCP server |
+| [gentle-ai](https://github.com/gentleman-programming/gentle-ai) | Ecosystem configurator, SDD workflow, Agent Teams Lite |
+| [OpenClaw](https://openclaw.dev) | 14 action bundles, WhatsApp integration, domotics |
+| [ClawFlows](https://github.com/nikilster/clawflows) | 112+ community workflows |
