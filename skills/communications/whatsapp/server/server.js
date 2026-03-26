@@ -31,6 +31,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const readline = require('readline')
+const { spawn, spawnSync } = require('child_process')
 
 const AUTH_DIR    = path.join(os.homedir(), '.dexter', 'whatsapp')
 const CONFIG_PATH = path.join(os.homedir(), '.dexter', 'notifications.json')
@@ -90,7 +91,7 @@ function toJid(phone) {
 }
 
 function fromJid(jid) {
-  return '+' + jid.replace('@s.whatsapp.net', '').replace('@c.us', '')
+  return '+' + jid.replace(/@s\.whatsapp\.net$/, '').replace(/@c\.us$/, '').replace(/@lid$/, '')
 }
 
 // ─── LLM call (stdlib https only) ────────────────────────────────────────────
@@ -220,10 +221,82 @@ async function handleUnknownSender(senderJid, incomingText) {
   }
 }
 
+// ─── LLM CLI subprocess ───────────────────────────────────────────────────────
+
+function detectLLMCli() {
+  // Priority: DEXTER_AGENT env → claude → opencode
+  const env = process.env.DEXTER_AGENT
+  if (env) return env
+  for (const cli of ['claude', 'opencode']) {
+    try {
+      const r = spawnSync('which', [cli], { encoding: 'utf8', timeout: 3000 })
+      if (r.status === 0 && r.stdout.trim()) return cli
+    } catch (_) {}
+  }
+  return null
+}
+
+function runLLMCli(cli, message) {
+  return new Promise((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    const child = spawn(cli, ['-p', message], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM')
+      console.error('[Dexter] LLM CLI timed out after 120s')
+      resolve(null)
+    }, 120000)
+
+    child.stdout.on('data', d => { stdout += d.toString() })
+    child.stderr.on('data', d => { stderr += d.toString() })
+
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      if (code === 0 && stdout.trim()) {
+        resolve(stdout.trim())
+      } else {
+        if (stderr) console.error(`[Dexter] LLM CLI stderr:`, stderr.substring(0, 300))
+        resolve(null)
+      }
+    })
+
+    child.on('error', (err) => {
+      clearTimeout(timer)
+      console.error('[Dexter] LLM CLI spawn error:', err.message)
+      resolve(null)
+    })
+  })
+}
+
+// ─── Owner handler ────────────────────────────────────────────────────────────
+
 async function handleAllowedSender(senderJid, incomingText) {
   const senderPhone = fromJid(senderJid)
   logMessage({ direction: 'in', from: senderPhone, text: incomingText, tier: 'allowed' })
   console.log(`[Dexter] Message from ${senderPhone} (allowed): ${incomingText.substring(0, 60)}`)
+
+  const cli = detectLLMCli()
+  if (!cli) {
+    console.warn('[Dexter] No LLM CLI found. Install claude CLI: npm install -g @anthropic-ai/claude-code')
+    return
+  }
+
+  console.log(`[Dexter] Thinking with ${cli}...`)
+  try {
+    const response = await runLLMCli(cli, incomingText)
+    if (response) {
+      await sock.sendMessage(senderJid, { text: response })
+      logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
+      console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
+    } else {
+      console.warn('[Dexter] LLM returned empty response')
+    }
+  } catch (e) {
+    console.error('[Dexter] handleAllowedSender error:', e.message)
+  }
 }
 
 // ─── HTTP server ──────────────────────────────────────────────────────────────
@@ -380,12 +453,25 @@ async function connect() {
 
       if (!text.trim()) continue
 
+      const persona = loadPersona()
       const cfg = loadConfig()
-      const allowFrom = cfg.whatsapp?.allowFrom || []
+      // allowFrom: persona takes priority, fallback to notifications.json
+      const allowFrom = (persona?.allowFrom || cfg.whatsapp?.allowFrom || []).map(n => n.replace(/\s/g, ''))
       const senderPhone = fromJid(senderJid)
+      const senderRaw = senderJid.replace(/@.*/, '') // raw number/lid without @domain
 
-      const isAllowed = allowFrom.length === 0
-        || allowFrom.some(n => n.replace(/\s/g, '') === senderPhone)
+      // Own device detection — self-chat arrives with @lid JID of the sending device
+      const myNum   = (sock?.user?.id || '').replace(/[^0-9].*/, '')
+      const myLid   = (sock?.authState?.creds?.me?.lid?.user || '')
+      const isSelf  = (myNum && senderRaw === myNum) || (myLid && senderRaw === myLid)
+
+      const matchesAllowFrom = allowFrom.length === 0
+        || allowFrom.some(n => {
+          const normalized = n.replace(/^\+/, '')
+          return senderPhone === n || senderRaw === normalized
+        })
+
+      const isAllowed = isSelf || matchesAllowFrom
 
       if (isAllowed) {
         await handleAllowedSender(senderJid, text)
