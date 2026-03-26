@@ -518,7 +518,8 @@ async function connect() {
           if (/^dexter\s+leave$/i.test(groupText.trim())) {
             persona.allowedGroups = (persona.allowedGroups || []).filter(g => g !== groupJid)
             savePersona(persona)
-            await sock.sendMessage(groupJid, { text: '👋 Dexter desactivado en este grupo.' })
+            await sock.sendMessage(groupJid, { text: '👋 Hasta luego!' })
+            await sock.groupLeave(groupJid)
             continue
           }
         }
