@@ -240,8 +240,11 @@ function runLLMCli(cli, message) {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
+    // Run from Dexter project root so Claude picks up DEXTER.md + CLAUDE.md context
+    const dexterRoot = path.resolve(__dirname, '../../../..')
     const child = spawn(cli, ['-p', message], {
       stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: dexterRoot,
     })
 
     const timer = setTimeout(() => {
