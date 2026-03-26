@@ -1,3 +1,6 @@
+
+<img width="2720" height="1381" alt="DEXTER" src="https://github.com/user-attachments/assets/ba260806-6f6f-4571-9d1c-ed0c7cc8a3df" />
+
 # Dexter
 
 **AI agent ecosystem configurator** — installs a complete skill system into Claude Code, OpenCode, Codex, Cursor, Gemini CLI, and VS Code.
