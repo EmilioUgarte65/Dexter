@@ -67,6 +67,11 @@ function loadPersona() {
   try { return JSON.parse(fs.readFileSync(PERSONA_PATH, 'utf8')) } catch (_) { return null }
 }
 
+function savePersona(persona) {
+  fs.mkdirSync(path.dirname(PERSONA_PATH), { recursive: true })
+  fs.writeFileSync(PERSONA_PATH, JSON.stringify(persona, null, 2))
+}
+
 // ─── Phone number resolution ──────────────────────────────────────────────────
 
 function getMyPhone() {
@@ -461,15 +466,45 @@ async function connect() {
       if (msg.key.fromMe) continue
       if (msg.key.remoteJid === 'status@broadcast') continue
       if (msg.key.remoteJid?.endsWith('@g.us')) {
-        // Groups: only respond if explicitly allowed in persona.allowedGroups
-        const allowedGroups = loadPersona()?.allowedGroups || []
-        if (!allowedGroups.includes(msg.key.remoteJid)) continue
-        // In groups, always require wake word
-        const wakeWord = loadPersona()?.wake_word !== undefined ? loadPersona().wake_word : 'dexter'
+        const groupJid  = msg.key.remoteJid
         const groupText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
         if (!groupText.trim()) continue
+
+        const persona      = loadPersona() || {}
+        const allowFrom    = (persona.allowFrom || []).map(n => n.replace(/\s/g, ''))
+        const senderPart   = msg.key.participant || ''
+        const senderRaw    = senderPart.replace(/@.*/, '').replace(/:.*/, '')
+        const resolvedPhone = senderPart.includes('@lid')
+          ? (lidToPhone.get(senderRaw) || fromJid(senderPart))
+          : fromJid(senderPart)
+        const isOwner = allowFrom.length === 0
+          || allowFrom.some(n => resolvedPhone === n || resolvedPhone.replace(/^\+/, '') === n.replace(/^\+/, ''))
+
+        // Owner commands in any group (no wake word needed)
+        if (isOwner) {
+          if (/^dexter\s+join$/i.test(groupText.trim())) {
+            const groups = persona.allowedGroups || []
+            if (!groups.includes(groupJid)) {
+              persona.allowedGroups = [...groups, groupJid]
+              savePersona(persona)
+              await sock.sendMessage(groupJid, { text: '✅ Dexter activado en este grupo.' })
+            }
+            continue
+          }
+          if (/^dexter\s+leave$/i.test(groupText.trim())) {
+            persona.allowedGroups = (persona.allowedGroups || []).filter(g => g !== groupJid)
+            savePersona(persona)
+            await sock.sendMessage(groupJid, { text: '👋 Dexter desactivado en este grupo.' })
+            continue
+          }
+        }
+
+        // Non-command group messages: only respond if group is allowed + wake word present
+        const allowedGroups = persona.allowedGroups || []
+        if (!allowedGroups.includes(groupJid)) continue
+        const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
         if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
-        await handleUnknownSender(msg.key.remoteJid, groupText)
+        await handleUnknownSender(groupJid, groupText)
         continue
       }
 
