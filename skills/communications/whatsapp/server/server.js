@@ -425,6 +425,10 @@ async function connect() {
       console.log('[Dexter] ✅ WhatsApp connected')
       isReady = true
       startHttpServer()
+      // Map own LID → own phone so self-chat messages pass the isAllowed check
+      const myLidUser = sock?.authState?.creds?.me?.lid?.user || ''
+      const myPhone   = '+' + (sock?.user?.id || '').replace(/[^0-9].*/, '')
+      if (myLidUser && myPhone) lidToPhone.set(myLidUser, myPhone)
     }
 
     if (connection === 'close') {
@@ -464,18 +468,22 @@ async function connect() {
 
   // ─── Incoming messages ──────────────────────────────────────────────────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`[Dexter] messages.upsert type=${type} count=${messages.length}`)
     if (type !== 'notify') return
 
     for (const msg of messages) {
+      console.log(`[Dexter] raw — remoteJid:${msg.key.remoteJid} fromMe:${msg.key.fromMe} hasText:${!!(msg.message?.conversation || msg.message?.extendedTextMessage?.text)}`)
+
       if (msg.key.remoteJid === 'status@broadcast') continue
 
       // Skip messages Dexter sent (prevents infinite loop on echo)
       if (msg.key.id && sentMsgIds.has(msg.key.id)) { sentMsgIds.delete(msg.key.id); continue }
 
-      // Allow fromMe only for self-chat (owner writing to their own number)
+      // Allow fromMe only for self-chat (remoteJid is own phone JID or own device LID)
       if (msg.key.fromMe) {
-        const myJid = sock?.user?.id?.replace(/:\d+@/, '@') // "5218337587196@s.whatsapp.net"
-        if (msg.key.remoteJid !== myJid) continue
+        const myJid = sock?.user?.id?.replace(/:\d+@/, '@')          // "5218337587196@s.whatsapp.net"
+        const myLid = (sock?.authState?.creds?.me?.lid?.user || '') + '@lid' // "142288659451954@lid"
+        if (msg.key.remoteJid !== myJid && msg.key.remoteJid !== myLid) continue
       }
 
       if (msg.key.remoteJid?.endsWith('@g.us')) {
