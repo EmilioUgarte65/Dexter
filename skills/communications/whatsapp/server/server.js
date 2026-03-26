@@ -505,12 +505,19 @@ async function connect() {
           }
         }
 
-        // Non-command group messages: only respond if group is allowed + wake word present
+        // Non-command group messages: only respond if group is allowed
         const allowedGroups = persona.allowedGroups || []
         if (!allowedGroups.includes(groupJid)) continue
-        const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
-        if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
-        await handleUnknownSender(groupJid, groupText)
+
+        if (isOwner) {
+          // Owner in an allowed group → full AI response, no wake word needed
+          await handleAllowedSender(groupJid, groupText)
+        } else {
+          // Strangers: require wake word
+          const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
+          if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
+          await handleUnknownSender(groupJid, groupText)
+        }
         continue
       }
 
@@ -543,6 +550,8 @@ async function connect() {
             || rPhone.endsWith(suffix)
             || senderRaw.endsWith(suffix)
         })
+
+      console.log(`[Dexter] msg — jid:${senderJid} resolved:${resolvedPhone} allowed:${isAllowed}`)
 
       if (isAllowed) {
         await handleAllowedSender(senderJid, text)
