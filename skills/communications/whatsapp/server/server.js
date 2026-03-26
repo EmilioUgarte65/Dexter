@@ -23,7 +23,7 @@
  *   WA_PORT=3001 node server.js
  */
 
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const http = require('http')
 const https = require('https')
@@ -49,6 +49,10 @@ function waitForEnter(prompt) {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
     rl.question(prompt, () => { rl.close(); resolve() })
   })
+}
+
+function waitForCredsSave(ms = 5000) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // ─── Loaders ──────────────────────────────────────────────────────────────────
@@ -279,12 +283,22 @@ async function connect() {
 
   sock = makeWASocket({
     version,
-    auth: state,
+    auth: {
+      creds: state.creds,
+      keys: makeCacheableSignalKeyStore(state.keys, { level: () => {} }),
+    },
     printQRInTerminal: false,
     browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     markOnlineOnConnect: false,
   })
+
+  // Prevent unhandled WebSocket errors from crashing the process
+  if (sock.ws && typeof sock.ws.on === 'function') {
+    sock.ws.on('error', (err) => {
+      console.error('[Dexter] WebSocket error:', err.message)
+    })
+  }
 
   sock.ev.on('creds.update', saveCreds)
 
@@ -316,8 +330,6 @@ async function connect() {
         waitingForPairing = true
         await waitForEnter('  ✅ Ingresaste el código en WhatsApp? Presioná Enter para continuar...\n')
         waitingForPairing = false
-        console.log('[Dexter] Reconnecting...')
-        connect()
       } catch (e) {
         console.error('[Dexter] Pairing code error:', e.message)
       }
@@ -336,6 +348,14 @@ async function connect() {
       if (code === DisconnectReason.loggedOut) {
         console.log('[Dexter] Logged out. Delete ~/.dexter/whatsapp/ and restart.')
         process.exit(0)
+      } else if (code === 515) {
+        // WhatsApp requested restart after pairing — close socket, wait for creds to flush, reconnect
+        console.log('[Dexter] Pairing complete — waiting for credentials to save...')
+        try { sock.ws?.close() } catch (_) {}
+        waitingForPairing = false
+        await waitForCredsSave(3000)
+        console.log('[Dexter] Reconnecting with new credentials...')
+        connect()
       } else if (waitingForPairing) {
         // Don't reconnect yet — user is still entering the code
       } else {
