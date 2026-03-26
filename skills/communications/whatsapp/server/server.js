@@ -44,6 +44,7 @@ let isReady = false
 let httpStarted = false
 let pairingRequested = false
 let waitingForPairing = false
+const lidToPhone = new Map() // LID (raw) → "+phone" — populated from contacts.upsert
 
 function waitForEnter(prompt) {
   return new Promise(resolve => {
@@ -441,6 +442,17 @@ async function connect() {
     }
   })
 
+  // ─── Contact LID mapping (needed to match @lid JIDs to phone numbers) ───────
+  sock.ev.on('contacts.upsert', (contacts) => {
+    for (const c of contacts) {
+      if (c.lid && c.id) {
+        const lid   = c.lid.replace(/@.*/, '').replace(/:.*/, '')
+        const phone = '+' + c.id.replace(/@.*/, '').replace(/:.*/, '')
+        lidToPhone.set(lid, phone)
+      }
+    }
+  })
+
   // ─── Incoming messages ──────────────────────────────────────────────────────
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
     if (type !== 'notify') return
@@ -460,21 +472,20 @@ async function connect() {
       const cfg = loadConfig()
       // allowFrom: persona takes priority, fallback to notifications.json
       const allowFrom = (persona?.allowFrom || cfg.whatsapp?.allowFrom || []).map(n => n.replace(/\s/g, ''))
-      const senderPhone = fromJid(senderJid)
-      const senderRaw = senderJid.replace(/@.*/, '') // raw number/lid without @domain
+      const senderRaw = senderJid.replace(/@.*/, '').replace(/:.*/, '') // raw without @domain and :device
 
-      // Own device detection — self-chat arrives with @lid JID of the sending device
-      const myNum   = (sock?.user?.id || '').replace(/[^0-9].*/, '')
-      const myLid   = (sock?.authState?.creds?.me?.lid?.user || '')
-      const isSelf  = (myNum && senderRaw === myNum) || (myLid && senderRaw === myLid)
+      // Resolve @lid to actual phone (from contacts sync cache)
+      const resolvedPhone = senderJid.includes('@lid')
+        ? (lidToPhone.get(senderRaw) || fromJid(senderJid))
+        : fromJid(senderJid)
 
-      const matchesAllowFrom = allowFrom.length === 0
+      const isAllowed = allowFrom.length === 0
         || allowFrom.some(n => {
           const normalized = n.replace(/^\+/, '')
-          return senderPhone === n || senderRaw === normalized
+          return resolvedPhone === n
+            || resolvedPhone.replace(/^\+/, '') === normalized
+            || senderRaw === normalized
         })
-
-      const isAllowed = isSelf || matchesAllowFrom
 
       if (isAllowed) {
         await handleAllowedSender(senderJid, text)
