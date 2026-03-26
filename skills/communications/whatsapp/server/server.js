@@ -44,7 +44,8 @@ let isReady = false
 let httpStarted = false
 let pairingRequested = false
 let waitingForPairing = false
-const lidToPhone = new Map() // LID (raw) → "+phone" — populated from contacts.upsert
+const lidToPhone   = new Map()  // LID (raw) → "+phone" — populated from contacts.upsert
+const sentMsgIds   = new Set()  // IDs of messages Dexter sent — skip on echo to prevent loops
 
 function waitForEnter(prompt) {
   return new Promise(resolve => {
@@ -200,14 +201,16 @@ async function handleUnknownSender(senderJid, incomingText) {
 
   if (!persona) {
     const fallback = 'Hola, en este momento no puedo responder. Te escribo a la brevedad 👋'
-    await sock.sendMessage(senderJid, { text: fallback })
+    const sent = await sock.sendMessage(senderJid, { text: fallback })
+    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
     logMessage({ direction: 'out', to: senderPhone, text: fallback, tier: 'fallback' })
     return
   }
 
   // Fixed reply — no LLM needed
   if (persona.stranger_reply) {
-    await sock.sendMessage(senderJid, { text: persona.stranger_reply })
+    const sent = await sock.sendMessage(senderJid, { text: persona.stranger_reply })
+    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
     logMessage({ direction: 'out', to: senderPhone, text: persona.stranger_reply, tier: 'persona-fixed' })
     return
   }
@@ -297,7 +300,8 @@ async function handleAllowedSender(senderJid, incomingText) {
   try {
     const response = await runLLMCli(cli, incomingText)
     if (response) {
-      await sock.sendMessage(senderJid, { text: response })
+      const sent = await sock.sendMessage(senderJid, { text: response })
+      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
       console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
     } else {
@@ -464,6 +468,9 @@ async function connect() {
 
     for (const msg of messages) {
       if (msg.key.remoteJid === 'status@broadcast') continue
+
+      // Skip messages Dexter sent (prevents infinite loop on echo)
+      if (msg.key.id && sentMsgIds.has(msg.key.id)) { sentMsgIds.delete(msg.key.id); continue }
 
       // Allow fromMe only for self-chat (owner writing to their own number)
       if (msg.key.fromMe) {
