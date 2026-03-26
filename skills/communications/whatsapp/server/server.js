@@ -488,17 +488,11 @@ async function connect() {
         })
 
       if (isAllowed) {
-        // Wake word filter — persona.wake_word (default: "dexter", set to null/false to disable)
-        const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
-        if (wakeWord) {
-          const re = new RegExp(`^${wakeWord}[,:\\s]?\\s*`, 'i')
-          if (!re.test(text.trim())) continue // ignore — wake word not present
-          const stripped = text.trim().replace(re, '').trim()
-          await handleAllowedSender(senderJid, stripped || text)
-        } else {
-          await handleAllowedSender(senderJid, text)
-        }
+        await handleAllowedSender(senderJid, text)
       } else {
+        // Strangers: only respond if they explicitly mention the wake word (default: "dexter")
+        const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
+        if (wakeWord && !new RegExp(wakeWord, 'i').test(text)) continue
         await handleUnknownSender(senderJid, text)
       }
     }
