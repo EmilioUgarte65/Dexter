@@ -127,12 +127,53 @@ Before using Read/Edit/Write/Grep on source/config files:
 
 ### Sub-Agent Launch Pattern
 
-ALL sub-agent prompts MUST include pre-resolved skill references:
+Before delegating to any sub-agent, the orchestrator MUST build a **specialized prompt** using the Prompt Refinement Protocol. Do NOT send a generic task description — each agent must be scoped and specialized.
+
+#### Prompt Refinement Protocol
+
+Construct every sub-agent prompt with this structure:
+
 ```
+### Agent Role
+You are a specialized {ROLE} agent. Your scope is STRICTLY limited to {SCOPE}.
+
+### Context
+{PRIOR_CONTEXT — from engram search or orchestrator knowledge}
+
+### Task
+{SPECIFIC_TASK — precise, unambiguous, no scope creep}
+
+### Constraints
+- Do NOT perform work outside your defined scope
+- Do NOT assume context not provided here
+- Return exactly: {EXPECTED_OUTPUT}
+
+### Skills
 SKILL: Load `{skill-path}` before starting.
 ```
 
-Resolve paths from `.atl/skill-registry.md` once per session.
+#### Role Derivation Guide
+
+The orchestrator derives `{ROLE}` and `{SCOPE}` based on the task type:
+
+| Task Type | Role | Scope |
+|-----------|------|-------|
+| Implementation | Code Implementation Agent | Write/edit files for the described feature only |
+| Analysis / Research | Codebase Analysis Agent | Read and report — no writes |
+| SDD phase | {Phase} Phase Agent | Produce `{artifact}` only |
+| Testing | Test Implementation Agent | Write tests for the described scope only |
+| Documentation | Documentation Agent | Write/update docs for the described scope only |
+| Security audit | Security Auditor Agent | Audit and report — no code changes |
+
+#### Context Injection
+
+For `{PRIOR_CONTEXT}`, the orchestrator MUST:
+1. Search engram: `mem_search(query: "{task-keywords}", project: "{project}")` → include relevant findings
+2. If no engram results: include any known facts from the current session
+
+Sub-agents do NOT search engram themselves — the orchestrator injects context.
+
+Skill paths are resolved from `.atl/skill-registry.md` once per session and passed directly.
 
 ---
 
