@@ -6,6 +6,10 @@
  *   - Numbers in allowFrom → full Dexter capabilities (outbound only, agent handles)
  *   - Unknown numbers     → restricted persona responder (AI replies as you)
  *
+ * Pairing: phone number pairing (no QR needed — works headless)
+ *   WA_PHONE=+528337587196 node server.js
+ *   Or set "allowFrom": ["+52..."] in ~/.dexter/whatsapp-persona.json
+ *
  * Persona config: ~/.dexter/whatsapp-persona.json
  * Notifications:  ~/.dexter/notifications.json
  * Credentials:    ~/.dexter/whatsapp/
@@ -15,7 +19,7 @@
  *   GET  /status
  *
  * Usage:
- *   node server.js              # port 3000
+ *   WA_PHONE=+528337587196 node server.js    # port 3000
  *   WA_PORT=3001 node server.js
  */
 
@@ -26,7 +30,7 @@ const https = require('https')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const qrcode = require('qrcode-terminal')
+const readline = require('readline')
 
 const AUTH_DIR    = path.join(os.homedir(), '.dexter', 'whatsapp')
 const CONFIG_PATH = path.join(os.homedir(), '.dexter', 'notifications.json')
@@ -37,6 +41,7 @@ const PORT = parseInt(process.env.WA_PORT || '3000', 10)
 let sock = null
 let isReady = false
 let httpStarted = false
+let pairingRequested = false
 
 // ─── Loaders ──────────────────────────────────────────────────────────────────
 
@@ -46,6 +51,16 @@ function loadConfig() {
 
 function loadPersona() {
   try { return JSON.parse(fs.readFileSync(PERSONA_PATH, 'utf8')) } catch (_) { return null }
+}
+
+// ─── Phone number resolution ──────────────────────────────────────────────────
+
+function getMyPhone() {
+  // Priority: WA_PHONE env → first allowFrom in persona
+  if (process.env.WA_PHONE) return process.env.WA_PHONE.replace(/\s/g, '')
+  const persona = loadPersona()
+  if (persona?.allowFrom?.length > 0) return persona.allowFrom[0].replace(/\s/g, '')
+  return null
 }
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
@@ -117,7 +132,6 @@ async function callLLM(persona, senderPhone, incomingText) {
   }
 
   if (provider === 'ollama') {
-    // Ollama uses HTTP not HTTPS — use built-in http module
     const baseUrl = persona.llm?.base_url || 'http://localhost:11434'
     return new Promise((resolve) => {
       const data = JSON.stringify({ model, prompt: `${systemPrompt}\n\nUser: ${incomingText}\nResponse:`, stream: false })
@@ -166,7 +180,6 @@ async function handleUnknownSender(senderJid, incomingText) {
   logMessage({ direction: 'in', from: senderPhone, text: incomingText, tier: 'restricted' })
 
   if (!persona) {
-    // No persona configured — send a safe default
     const fallback = 'Hola, en este momento no puedo responder. Te escribo a la brevedad 👋'
     await sock.sendMessage(senderJid, { text: fallback })
     logMessage({ direction: 'out', to: senderPhone, text: fallback, tier: 'fallback' })
@@ -252,6 +265,7 @@ function startHttpServer() {
 // ─── Baileys socket ───────────────────────────────────────────────────────────
 
 async function connect() {
+  fs.mkdirSync(AUTH_DIR, { recursive: true })
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
 
   sock = makeWASocket({
@@ -264,25 +278,52 @@ async function connect() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
-    if (qr) {
-      console.log('\n[Dexter] Scan this QR code with your phone:\n')
-      qrcode.generate(qr, { small: true })
-      console.log('\n  WhatsApp → Settings → Linked Devices → Link a Device\n')
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, isNewLogin }) => {
+
+    // ── Phone number pairing (headless — no QR) ──────────────────────────────
+    if (!sock.authState.creds.registered && !pairingRequested) {
+      pairingRequested = true
+      const phone = getMyPhone()
+      if (!phone) {
+        console.error('[Dexter] ❌ No phone number found. Set WA_PHONE env or add allowFrom to ~/.dexter/whatsapp-persona.json')
+        process.exit(1)
+      }
+      // Small delay to let the socket stabilize
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const code = await sock.requestPairingCode(phone.replace(/[^0-9]/g, ''))
+        const formatted = code.match(/.{1,4}/g).join('-')
+        console.log('\n┌─────────────────────────────────────────┐')
+        console.log('│         DEXTER — WhatsApp Pairing        │')
+        console.log('├─────────────────────────────────────────┤')
+        console.log(`│  Code: ${formatted.padEnd(33)}│`)
+        console.log('├─────────────────────────────────────────┤')
+        console.log('│  En tu WhatsApp:                         │')
+        console.log('│  ⋮ → Dispositivos vinculados             │')
+        console.log('│  → Vincular con número de teléfono       │')
+        console.log('│  → Ingresá el código de arriba           │')
+        console.log('└─────────────────────────────────────────┘\n')
+      } catch (e) {
+        console.error('[Dexter] Pairing code error:', e.message)
+      }
     }
+
     if (connection === 'open') {
       console.log('[Dexter] ✅ WhatsApp connected')
       isReady = true
       startHttpServer()
     }
+
     if (connection === 'close') {
       isReady = false
+      pairingRequested = false
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       if (code === DisconnectReason.loggedOut) {
         console.log('[Dexter] Logged out. Delete ~/.dexter/whatsapp/ and restart.')
+        process.exit(0)
       } else {
         console.log('[Dexter] Disconnected — reconnecting...')
-        connect()
+        setTimeout(connect, 3000)
       }
     }
   })
@@ -292,7 +333,6 @@ async function connect() {
     if (type !== 'notify') return
 
     for (const msg of messages) {
-      // Skip own messages and status broadcasts
       if (msg.key.fromMe) continue
       if (msg.key.remoteJid === 'status@broadcast') continue
 
@@ -307,7 +347,6 @@ async function connect() {
       const allowFrom = cfg.whatsapp?.allowFrom || []
       const senderPhone = fromJid(senderJid)
 
-      // Normalize for comparison: strip spaces, keep + and digits
       const isAllowed = allowFrom.length === 0
         || allowFrom.some(n => n.replace(/\s/g, '') === senderPhone)
 
@@ -321,6 +360,10 @@ async function connect() {
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
+
+console.log('[Dexter] Starting WhatsApp server...')
+const myPhone = getMyPhone()
+if (myPhone) console.log(`[Dexter] Phone: ${myPhone}`)
 
 connect().catch(err => {
   console.error('[Dexter] Fatal error:', err.message)
