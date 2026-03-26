@@ -479,11 +479,12 @@ async function connect() {
       // Skip messages Dexter sent (prevents infinite loop on echo)
       if (msg.key.id && sentMsgIds.has(msg.key.id)) { sentMsgIds.delete(msg.key.id); continue }
 
-      // Allow fromMe only for self-chat (remoteJid is own phone JID or own device LID)
+      // Filter fromMe messages — allow: self-chat and groups (owner writing in group)
       if (msg.key.fromMe) {
-        const myJid = (sock?.user?.id || '').replace(/:\d+@/, '@')               // "5218337587196@s.whatsapp.net"
-        const myLid = (sock?.authState?.creds?.me?.lid || '').replace(/:\d+@/, '@') // "142288659451954@lid"
-        if (msg.key.remoteJid !== myJid && msg.key.remoteJid !== myLid) continue
+        const isGroup = msg.key.remoteJid?.endsWith('@g.us')
+        const myJid   = (sock?.user?.id || '').replace(/:\d+@/, '@')
+        const myLid   = (sock?.authState?.creds?.me?.lid || '').replace(/:\d+@/, '@')
+        if (!isGroup && msg.key.remoteJid !== myJid && msg.key.remoteJid !== myLid) continue
       }
 
       if (msg.key.remoteJid?.endsWith('@g.us')) {
@@ -493,13 +494,15 @@ async function connect() {
 
         const persona      = loadPersona() || {}
         const allowFrom    = (persona.allowFrom || []).map(n => n.replace(/\s/g, ''))
-        const senderPart   = msg.key.participant || ''
-        const senderRaw    = senderPart.replace(/@.*/, '').replace(/:.*/, '')
+        const senderPart    = msg.key.participant || ''
+        const senderRaw     = senderPart.replace(/@.*/, '').replace(/:.*/, '')
         const resolvedPhone = senderPart.includes('@lid')
           ? (lidToPhone.get(senderRaw) || fromJid(senderPart))
           : fromJid(senderPart)
-        const isOwner = allowFrom.length === 0
-          || allowFrom.some(n => resolvedPhone === n || resolvedPhone.replace(/^\+/, '') === n.replace(/^\+/, ''))
+        const suffix10 = (n) => n.replace(/^\+/, '').slice(-10)
+        const isOwner = msg.key.fromMe  // message sent by this device = owner
+          || allowFrom.length === 0
+          || allowFrom.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
 
         // Owner commands in any group (no wake word needed)
         if (isOwner) {
