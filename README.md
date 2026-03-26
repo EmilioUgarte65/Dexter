@@ -6,9 +6,9 @@
 **AI agent ecosystem configurator** — installs a complete skill system into Claude Code, OpenCode, Codex, Cursor, Gemini CLI, and VS Code.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/skills-46-brightgreen.svg)](#skills)
+[![Skills](https://img.shields.io/badge/skills-48-brightgreen.svg)](#skills)
 [![Platforms](https://img.shields.io/badge/platforms-6-orange.svg)](#supported-agents)
-[![Tests](https://img.shields.io/badge/tests-91%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-99%20passing-brightgreen.svg)](#testing)
 
 ---
 
@@ -74,6 +74,21 @@ mem_save    → save a decision or discovery
 mem_search  → find anything from past sessions
 mem_context → load recent session history on startup
 ```
+
+### 🔒 Your Memory is Yours — 100% Private
+
+Every Dexter installation builds its own memory from YOUR conversations. Nothing is shared.
+
+| What | Where | Shared? |
+|------|-------|---------|
+| Skills, DEXTER.md, capabilities | GitHub repo | ✅ Same for everyone — the base brain |
+| Your conversations & decisions | `~/.claude/` (Engram SQLite) | ❌ Never leaves your machine |
+| Generated skills | `~/.dexter/community/` | ❌ Local only |
+| Notifications config & tokens | `~/.dexter/` | ❌ Local only |
+
+The GitHub repo is the **onboarding manual** — identical for all users. Your Dexter grows uniquely through your sessions: the more you use it, the more it learns your preferences, your stack, your workflow.
+
+Two users installing Dexter get the same base agent. After a week of conversations, they have two completely different agents.
 
 ### 💬 WhatsApp Auto-Responder
 Works with any regular WhatsApp number — no Meta Business account needed. Scan a QR once, paired forever.
@@ -143,6 +158,29 @@ Spec-Driven Development — a structured planning layer for substantial changes.
 /sdd-apply          → implement in batches
 /sdd-verify         → validate vs specs
 ```
+
+### 🛒 Marketplace — Universal Skill Hub
+
+Discover and install skills from any source with one command:
+
+```bash
+# Search across all sources
+dexter marketplace search "linkedin poster"
+
+# Install a community skill (goes through security audit automatically)
+dexter marketplace install marketing/linkedin-poster
+
+# No skill exists? Dexter writes it
+dexter marketplace generate "I need a skill to post to LinkedIn"
+```
+
+**Sources:**
+- [dexter-marketplace](https://github.com/EmilioUgarte65/dexter-marketplace) — official community repo (segmented by category)
+- **ClawHub** — 100+ pre-built agent skills
+- **ClawFlows** — 112+ community workflows
+- **GitHub** — any public repo tagged `dexter-skill`
+
+Every install goes through `security-auditor` automatically. No unsafe code runs.
 
 ### 🔄 ClawFlows Integration
 112+ community workflows ready to import. When you ask for a recurring automation, Dexter checks ClawFlows before building from scratch.
