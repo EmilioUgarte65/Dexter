@@ -463,8 +463,14 @@ async function connect() {
     if (type !== 'notify') return
 
     for (const msg of messages) {
-      if (msg.key.fromMe) continue
       if (msg.key.remoteJid === 'status@broadcast') continue
+
+      // Allow fromMe only for self-chat (owner writing to their own number)
+      if (msg.key.fromMe) {
+        const myJid = sock?.user?.id?.replace(/:\d+@/, '@') // "5218337587196@s.whatsapp.net"
+        if (msg.key.remoteJid !== myJid) continue
+      }
+
       if (msg.key.remoteJid?.endsWith('@g.us')) {
         const groupJid  = msg.key.remoteJid
         const groupText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
@@ -529,9 +535,13 @@ async function connect() {
       const isAllowed = allowFrom.length === 0
         || allowFrom.some(n => {
           const normalized = n.replace(/^\+/, '')
-          return resolvedPhone === n
-            || resolvedPhone.replace(/^\+/, '') === normalized
+          const rPhone     = resolvedPhone.replace(/^\+/, '')
+          // Suffix match (last 10 digits) handles country code variants like 52 vs 521
+          const suffix = normalized.slice(-10)
+          return rPhone === normalized
             || senderRaw === normalized
+            || rPhone.endsWith(suffix)
+            || senderRaw.endsWith(suffix)
         })
 
       if (isAllowed) {
