@@ -488,7 +488,16 @@ async function connect() {
         })
 
       if (isAllowed) {
-        await handleAllowedSender(senderJid, text)
+        // Wake word filter — persona.wake_word (default: "dexter", set to null/false to disable)
+        const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
+        if (wakeWord) {
+          const re = new RegExp(`^${wakeWord}[,:\\s]?\\s*`, 'i')
+          if (!re.test(text.trim())) continue // ignore — wake word not present
+          const stripped = text.trim().replace(re, '').trim()
+          await handleAllowedSender(senderJid, stripped || text)
+        } else {
+          await handleAllowedSender(senderJid, text)
+        }
       } else {
         await handleUnknownSender(senderJid, text)
       }
