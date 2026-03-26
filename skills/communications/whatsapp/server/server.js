@@ -316,6 +316,8 @@ async function connect() {
         waitingForPairing = true
         await waitForEnter('  ✅ Ingresaste el código en WhatsApp? Presioná Enter para continuar...\n')
         waitingForPairing = false
+        console.log('[Dexter] Reconnecting...')
+        connect()
       } catch (e) {
         console.error('[Dexter] Pairing code error:', e.message)
       }
