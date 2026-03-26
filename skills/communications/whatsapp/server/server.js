@@ -460,6 +460,7 @@ async function connect() {
     for (const msg of messages) {
       if (msg.key.fromMe) continue
       if (msg.key.remoteJid === 'status@broadcast') continue
+      if (msg.key.remoteJid?.endsWith('@g.us')) continue
 
       const senderJid = msg.key.remoteJid
       const text = msg.message?.conversation
