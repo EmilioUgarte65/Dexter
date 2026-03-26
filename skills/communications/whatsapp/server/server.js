@@ -19,7 +19,7 @@
  *   WA_PORT=3001 node server.js
  */
 
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState } = require('@whiskeysockets/baileys')
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, Browsers } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const http = require('http')
 const https = require('https')
@@ -173,6 +173,13 @@ async function handleUnknownSender(senderJid, incomingText) {
     return
   }
 
+  // Fixed reply — no LLM needed
+  if (persona.stranger_reply) {
+    await sock.sendMessage(senderJid, { text: persona.stranger_reply })
+    logMessage({ direction: 'out', to: senderPhone, text: persona.stranger_reply, tier: 'persona-fixed' })
+    return
+  }
+
   try {
     const reply = await callLLM(persona, senderPhone, incomingText)
     if (reply) {
@@ -250,7 +257,7 @@ async function connect() {
   sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
-    browser: ['Dexter', 'Desktop', '1.0'],
+    browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     markOnlineOnConnect: false,
   })
