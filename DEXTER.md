@@ -147,6 +147,8 @@ You are a specialized {ROLE} agent. Your scope is STRICTLY limited to {SCOPE}.
 - Do NOT perform work outside your defined scope
 - Do NOT assume context not provided here
 - Return exactly: {EXPECTED_OUTPUT}
+- Save discoveries to Engram using `project: "{project}:{agent-type}"` (your scoped namespace)
+- Save cross-cutting decisions to `project: "{project}"` (shared namespace)
 
 ### Skills
 SKILL: Load `{skill-path}` before starting.
@@ -165,13 +167,60 @@ The orchestrator derives `{ROLE}` and `{SCOPE}` based on the task type:
 | Documentation | Documentation Agent | Write/update docs for the described scope only |
 | Security audit | Security Auditor Agent | Audit and report — no code changes |
 
+### Agent Memory Namespacing
+
+Each sub-agent type has its own isolated Engram namespace. Memories are fully segmented — an implementation agent never sees testing memories, a security agent never sees docs memories.
+
+#### Namespace Map
+
+| Agent Type | Engram Project |
+|------------|----------------|
+| Implementation | `{project}:implementation` |
+| Analysis / Research | `{project}:analysis` |
+| Testing | `{project}:testing` |
+| Documentation | `{project}:docs` |
+| Security | `{project}:security` |
+| SDD phases | `{project}:sdd` |
+| New / unknown type | `{project}:{auto-slug}` — orchestrator derives slug from task description |
+
+#### Orchestrator Context Injection (updated)
+
+When building `{PRIOR_CONTEXT}` for a sub-agent prompt, the orchestrator MUST search TWO namespaces:
+
+1. **Agent-scoped**: `mem_search(query: "{task-keywords}", project: "{project}:{agent-type}")` — agent-specific memories
+2. **Shared**: `mem_search(query: "{task-keywords}", project: "{project}")` — cross-cutting project decisions
+
+Inject both results combined. Agent-scoped results take priority in ordering.
+
+#### Sub-Agent Save Convention
+
+When a sub-agent finishes and saves discoveries to Engram, it MUST use its scoped project:
+
+```
+mem_save(
+  project: "{project}:{agent-type}",   ← scoped namespace
+  topic_key: "{agent-type}/{task-summary}",
+  ...
+)
+```
+
+Cross-cutting decisions (architecture, global conventions) are saved to `project: "{project}"` (shared namespace) instead.
+
+#### New Agent Type Protocol
+
+If the task does not match any of the 6 known types:
+1. Orchestrator derives a slug from the task (e.g., "data-migration", "performance-profiling")
+2. Uses `{project}:{slug}` as the namespace — it is auto-created on first save
+3. Adds the new type to the Role Derivation Guide for future sessions via `mem_save`
+
 #### Context Injection
 
-For `{PRIOR_CONTEXT}`, the orchestrator MUST:
-1. Search engram: `mem_search(query: "{task-keywords}", project: "{project}")` → include relevant findings
-2. If no engram results: include any known facts from the current session
+For `{PRIOR_CONTEXT}`, the orchestrator MUST search TWO Engram namespaces and combine results:
 
-Sub-agents do NOT search engram themselves — the orchestrator injects context.
+1. **Agent-scoped** (primary): `mem_search(query: "{task-keywords}", project: "{project}:{agent-type}")` — memories specific to this agent type
+2. **Shared** (secondary): `mem_search(query: "{task-keywords}", project: "{project}")` — cross-cutting project decisions
+
+Sub-agents do NOT search Engram themselves — the orchestrator injects context. This keeps each agent focused on its concrete sub-task.
 
 Skill paths are resolved from `.atl/skill-registry.md` once per session and passed directly.
 
