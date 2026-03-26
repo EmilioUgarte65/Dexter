@@ -52,7 +52,8 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 | `security` | `skills/security/` | security-auditor, virustotal, linux-security-tools, hardening-check | seguridad, auditoría, nmap, VirusTotal |
 | `ai` | `skills/ai/` | ollama-router, token-optimizer, llm-router | Ollama, modelo local, optimizar tokens, fallback LLM, proveedor |
 | `infrastructure` | `skills/infrastructure/` | webhooks | webhook, cron job, sistema |
-| `self-extend` | `skills/self-extend/` | skill-hot-reload, skill-modifier | nueva skill, hot-reload, extender Dexter |
+| `self-extend` | `skills/self-extend/` | skill-hot-reload, skill-modifier, skill-writer | nueva skill, hot-reload, extender Dexter, skill-writer, generate skill, crear skill |
+| `marketplace` | `skills/marketplace/` | marketplace | marketplace, buscar skill, instalar skill, install skill, hay una skill para, dexter install, browse skills |
 | `dev` | `skills/dev/` | sentry, self-correct-loop | sentry, error, crash, exception, bug report, self-correct, fix until it works, iterate until green |
 
 ### Individual Skills by Bundle
@@ -139,6 +140,12 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 | `skill-hot-reload` | `skills/self-extend/skill-hot-reload/SKILL.md` |
 | `skill-modifier` | `skills/self-extend/skill-modifier/SKILL.md` |
 | `self-correct-loop` | `skills/self-extend/self-correct-loop/SKILL.md` |
+| `skill-writer` | `skills/skill-writer/SKILL.md` |
+
+#### marketplace
+| Skill | Path |
+|-------|------|
+| `marketplace` | `skills/marketplace/SKILL.md` |
 
 #### dev
 | Skill | Path | Script |
@@ -171,7 +178,7 @@ Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/`
 
 ## Skill Count
 
-Total leaf skills with SKILL.md: **46**
+Total leaf skills with SKILL.md: **48**
 
 | # | Bundle | Skill |
 |---|--------|-------|
@@ -221,6 +228,8 @@ Total leaf skills with SKILL.md: **46**
 | 42 | compatibility | skill-creator |
 | 43 | dev | sentry |
 | 44 | dev | self-correct-loop |
+| 47 | self-extend | skill-writer |
+| 48 | marketplace | marketplace |
 
 ---
 

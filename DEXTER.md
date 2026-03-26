@@ -247,7 +247,8 @@ Skills are loaded **lazily** — only when context triggers them. CAPABILITIES.m
 | `domotics` | hogar, dispositivo, Home Assistant, MQTT, Philips Hue, luces, IoT, red local |
 | `security` | seguridad, auditoría, vulnerability, nmap, VirusTotal, hardening, plugin externo |
 | `ai-local` | Ollama, modelo local, optimizar tokens, clasificar, resumir (always active) |
-| `self-extend` | nueva skill, escribir skill, modificar skill, hot-reload, extender Dexter |
+| `self-extend` | nueva skill, escribir skill, modificar skill, hot-reload, extender Dexter, skill-writer, generate skill, crear skill, no skill for, inventar skill, programar skill, write skill |
+| `marketplace` | marketplace, buscar skill, instalar skill, install skill, hay una skill para, dexter install, browse skills, update skills, list installed, dexter marketplace |
 
 ### Loading Protocol
 
@@ -255,6 +256,10 @@ When a bundle trigger is detected:
 1. Announce: "Activating {bundle} bundle..."
 2. Read the relevant SKILL.md files from `skills/{bundle}/`
 3. Follow the skill instructions for the task
+
+**Explicit skill paths for non-bundle-nested skills:**
+- `marketplace` bundle → `skills/marketplace/SKILL.md`
+- `skill-writer` (self-extend bundle) → `skills/skill-writer/SKILL.md`
 
 ---
 
