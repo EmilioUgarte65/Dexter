@@ -1,5 +1,5 @@
 {
-  "_comment": "Dexter WhatsApp Persona — copy to ~/.dexter/whatsapp-persona.json y personalizá todo",
+  "_comment": "Dexter Telegram Persona — copy a ~/.dexter/telegram-persona.json y personalizá todo",
 
   "name": "TU NOMBRE",
 
@@ -21,7 +21,16 @@
 
   "fallback_message": "Hola! En este momento no puedo responder, te escribo pronto 👋",
 
-  "stranger_reply": "Hola! No tengo tu número registrado. Si necesitás algo, escribime a mi correo.",
+  "stranger_reply": "Hola! No te tengo registrado. Si necesitás algo, escribime por los canales oficiales.",
+
+  "allowFrom": [
+    "123456789",
+    "@ejemplo_usuario"
+  ],
+
+  "allowedGroups": [
+    "-1001234567890"
+  ],
 
   "llm": {
     "provider": "anthropic",
@@ -29,9 +38,9 @@
   },
 
   "users": {
-    "_comment": "Overrides por usuario. La clave es el número de teléfono con código de país.",
+    "_comment": "Overrides por usuario. La clave es el Telegram user ID o @username.",
 
-    "+5491155551234": {
+    "123456789": {
       "name": "María (cliente VIP)",
       "tier": "allowed",
       "tone": "profesional y atento",
@@ -43,7 +52,7 @@
       "capabilities": "full"
     },
 
-    "+5491155559999": {
+    "987654321": {
       "name": "Pedro (contacto casual)",
       "tier": "restricted",
       "tone": "amigable pero breve",
@@ -54,7 +63,7 @@
       "capabilities": "persona-only"
     },
 
-    "+5491155550000": {
+    "111111111": {
       "name": "Spammer conocido",
       "tier": "blocked",
       "tone": null,
@@ -64,7 +73,21 @@
   },
 
   "blocked": [
-    "+5491100000000",
-    "+5491100000001"
-  ]
+    "000000001",
+    "000000002"
+  ],
+
+  "groups": {
+    "_comment": "Configuración de personalidad por grupo de Telegram.",
+
+    "-1001234567890": {
+      "name": "Grupo principal",
+      "tone": "profesional",
+      "rules": [
+        "Responder solo cuando se mencione al bot",
+        "Mantener tono formal en este grupo"
+      ],
+      "language": "es"
+    }
+  }
 }
