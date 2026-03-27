@@ -1,4 +1,4 @@
-# Dexter Installer — Windows (PowerShell 5+)
+﻿# Dexter Installer — Windows (PowerShell 5+)
 # Usage: .\install.ps1 [-Agent claude-code|opencode|codex|cursor|gemini|vscode] [-DryRun]
 [CmdletBinding()]
 param(
@@ -243,7 +243,7 @@ function Configure-MCPs {
       }
     }
     "TOMLFile" {
-      $tomlAppend = @"
+      $tomlAppend = @'
 
 # Dexter MCP servers
 [mcp.engram]
@@ -253,9 +253,9 @@ args = ["mcp", "--tools=agent"]
 [mcp.context7]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]
-"@
+'@
       Add-Content $Paths.SettingsFile $tomlAppend
-      Success "  MCPs appended to $($Paths.SettingsFile)"
+      Success ("  MCPs appended to " + $Paths.SettingsFile)
     }
     "MCPConfigFile" {
       $mcpConfig = @{
@@ -282,7 +282,7 @@ function Setup-WSL2Bridge {
     $wslCheck = wsl bash -c "test -f ~/proyectos/Dexter/install.sh && echo 'found'" 2>&1
     if ($wslCheck -eq "found") {
       Success "Dexter found in WSL2 — bridge available"
-      Info "  Use WSL2 for Linux-only skills (nmap, arp-scan, etc.)"
+      Info "  Use WSL2 for Linux-only skills: nmap, arp-scan, etc."
     } else {
       Warn "Dexter not found in WSL2. For Linux skills, install Dexter inside WSL2 too:"
       Info "  wsl bash -c 'cd ~/proyectos/Dexter && bash install.sh'"
@@ -336,4 +336,4 @@ Info "  Backup : $BackupDir"
 Info "  Config : $($paths.PromptFile)"
 Write-Host ""
 Info "Restart your agent to activate Dexter."
-Info "Run '.\uninstall.ps1' to revert all changes."
+Info "Run .\uninstall.ps1 to revert all changes."
