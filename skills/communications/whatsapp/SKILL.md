@@ -48,14 +48,42 @@ Create `~/.dexter/whatsapp-persona.json`:
 
 ### 3. Start the server
 
+#### First run (pairing)
+
 ```bash
 # From Dexter project root
 WA_PHONE=+521XXXXXXXXXX node skills/communications/whatsapp/server/server.js
 ```
 
-First run only: a pairing code is shown. In WhatsApp → ⋮ → Linked devices → Link with phone number → enter the code. Press Enter in the terminal to continue.
+A pairing code is shown. In WhatsApp → ⋮ → Linked devices → Link with phone number → enter the code. Press Enter in the terminal to continue.
 
 Credentials are saved in `~/.dexter/whatsapp/` — subsequent starts connect automatically.
+
+#### Keep it alive with pm2 (recommended)
+
+Install pm2 once:
+
+```bash
+npm install -g pm2
+```
+
+Start and persist:
+
+```bash
+# From Dexter project root
+WA_PHONE=+521XXXXXXXXXX pm2 start skills/communications/whatsapp/server/server.js --name dexter-wa
+pm2 save                  # persist across reboots
+pm2 startup               # auto-start on system boot (follow the printed command)
+```
+
+Useful commands:
+
+```bash
+pm2 status                # see if it's running
+pm2 logs dexter-wa        # tail logs
+pm2 restart dexter-wa     # restart
+pm2 stop dexter-wa        # stop
+```
 
 ---
 
