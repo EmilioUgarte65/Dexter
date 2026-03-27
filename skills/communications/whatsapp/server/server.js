@@ -362,11 +362,16 @@ function runLLMCli(cli, message) {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
-    // Run from Dexter project root so Claude picks up DEXTER.md + CLAUDE.md context
+    // Run from Dexter project root so Claude picks up DEXTER.md + CLAUDE.md context.
+    // Unset CLAUDECODE env var to avoid "nested session" error when the server
+    // is started from inside an active Claude Code / Antigravity session.
     const dexterRoot = path.resolve(__dirname, '../../../..')
+    const spawnEnv = { ...process.env }
+    delete spawnEnv.CLAUDECODE
     const child = spawn(cli, ['-p', message], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: dexterRoot,
+      env: spawnEnv,
     })
 
     const timer = setTimeout(() => {
