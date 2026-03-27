@@ -366,21 +366,47 @@ function detectLLMCli() {
     } catch (_) {}
   }
 
-  // 2. Fallback: search inside known IDE extension directories
+  // 2. Fallback: search inside known IDE extension directories.
   // Covers cases where Claude Code is installed as a VS Code / fork extension
   // but not as a global CLI (e.g. Antigravity, Cursor, VSCodium, VS Code).
+  // Supports Windows, Linux, and macOS.
+  const home = os.homedir()
+
   if (isWin) {
-    const home = os.homedir()
     const ideDirs = ['.antigravity', '.cursor', '.vscode', 'AppData\\Local\\Programs\\cursor']
-    const glob   = require('fs')
     for (const dir of ideDirs) {
       const extRoot = path.join(home, dir, 'extensions')
       try {
-        const entries = glob.readdirSync(extRoot)
+        const entries = fs.readdirSync(extRoot)
         for (const entry of entries) {
           if (!entry.startsWith('anthropic.claude-code')) continue
           const bin = path.join(extRoot, entry, 'resources', 'native-binary', 'claude.exe')
-          if (glob.existsSync(bin)) return bin
+          if (fs.existsSync(bin)) return bin
+        }
+      } catch (_) {}
+    }
+  } else {
+    // Linux: ~/.config/Code/User/globalStorage or ~/.cursor/extensions
+    // macOS: ~/Library/Application Support/Code/User/globalStorage or ~/.cursor/extensions
+    const isMac = process.platform === 'darwin'
+    const ideDirs = [
+      path.join(home, '.cursor', 'extensions'),
+      path.join(home, '.vscode', 'extensions'),
+      path.join(home, '.antigravity', 'extensions'),
+      isMac
+        ? path.join(home, 'Library', 'Application Support', 'Cursor', 'extensions')
+        : path.join(home, '.config', 'Cursor', 'extensions'),
+      isMac
+        ? path.join(home, 'Library', 'Application Support', 'Code', 'extensions')
+        : path.join(home, '.config', 'Code', 'extensions'),
+    ]
+    for (const extRoot of ideDirs) {
+      try {
+        const entries = fs.readdirSync(extRoot)
+        for (const entry of entries) {
+          if (!entry.startsWith('anthropic.claude-code')) continue
+          const bin = path.join(extRoot, entry, 'resources', 'native-binary', 'claude')
+          if (fs.existsSync(bin)) return bin
         }
       } catch (_) {}
     }
