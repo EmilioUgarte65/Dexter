@@ -246,11 +246,6 @@ setup_whatsapp() {
 
   [[ ! -f "$server_dir/package.json" ]] && return
 
-  if [[ "$NODE_AVAILABLE" == false ]]; then
-    warn "  WhatsApp server requires Node.js — skipped. Install Node.js and run: bash $server_dir/start.sh"
-    return
-  fi
-
   [[ "$DRY_RUN" == true ]] && { info "[dry-run] Would set up WhatsApp server at $server_dir"; return; }
 
   echo ""
@@ -260,6 +255,33 @@ setup_whatsapp() {
   if [[ "${answer,,}" != "y" ]]; then
     info "  Skipping WhatsApp setup. Run later: bash $server_dir/start.sh"
     return
+  fi
+
+  # Node.js is only installed if the user confirmed WhatsApp setup above.
+  # Supports brew (macOS), apt (Debian/Ubuntu), dnf (Fedora), pacman (Arch).
+  # Falls back to a manual install message if no supported package manager is found.
+  if [[ "$NODE_AVAILABLE" == false ]]; then
+    info "  Node.js is required for WhatsApp. Installing..."
+    local os
+    os=$(detect_os)
+    if [[ "$os" == "macos" ]] && command -v brew &>/dev/null; then
+      brew install node && NODE_AVAILABLE=true
+    elif [[ "$os" == "linux" ]]; then
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y nodejs npm && NODE_AVAILABLE=true
+      elif command -v dnf &>/dev/null; then
+        sudo dnf install -y nodejs && NODE_AVAILABLE=true
+      elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm nodejs npm && NODE_AVAILABLE=true
+      fi
+    fi
+    if [[ "$NODE_AVAILABLE" == false ]]; then
+      warn "  Could not install Node.js automatically."
+      info "  Install it manually from: https://nodejs.org"
+      info "  Then run: bash $server_dir/start.sh"
+      return
+    fi
+    success "  Node.js installed."
   fi
 
   info "Installing WhatsApp server dependencies..."
@@ -543,6 +565,19 @@ main() {
 
   header "Step 6: Verify"
   verify_install "$SYSTEM_PROMPT_FILE" "$SKILLS_DIR"
+
+  # Inform the user about Engram only if it's not already installed.
+  # Engram enables persistent cross-session memory. Without it, Dexter works
+  # but forgets everything between sessions.
+  if ! command -v engram &>/dev/null; then
+    echo ""
+    echo -e "${BOLD}💾 Persistent Memory (Engram)${RESET}"
+    echo -e "  Dexter can remember decisions, bugs, and conventions across sessions."
+    echo -e "  To enable it, install Engram:"
+    echo -e "    • macOS/Linux: ${BOLD}brew install engram${RESET}"
+    echo -e "    • Any platform: ${BOLD}go install github.com/nicholasgasior/engram@latest${RESET} (requires Go)"
+    echo -e "  Without Engram, Dexter works fine — but starts fresh every session."
+  fi
 
   echo ""
   header "Dexter installed successfully!"

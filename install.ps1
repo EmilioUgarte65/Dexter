@@ -329,6 +329,19 @@ Configure-MCPs -Paths $paths -AgentName $detectedAgent
 Write-Host "`nStep 5: WSL2 Bridge" -ForegroundColor Blue
 Setup-WSL2Bridge
 
+# Inform the user about Engram only if it's not already installed.
+# Engram enables persistent cross-session memory. Without it, Dexter works
+# but forgets everything between sessions.
+if (-not (Get-Command engram -ErrorAction SilentlyContinue)) {
+  Write-Host ""
+  Write-Host "💾 Persistent Memory (Engram)" -ForegroundColor White
+  Info "  Dexter can remember decisions, bugs, and conventions across sessions."
+  Info "  To enable it, install Engram:"
+  Info "    • Windows (winget): winget install engram"
+  Info "    • Any platform:     go install github.com/nicholasgasior/engram@latest (requires Go)"
+  Info "  Without Engram, Dexter works fine — but starts fresh every session."
+}
+
 Write-Host ""
 Success "Dexter v$DexterVersion installed successfully!"
 Info "  Agent  : $detectedAgent"
