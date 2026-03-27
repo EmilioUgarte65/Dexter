@@ -256,19 +256,30 @@ async function handleGroupChat(groupJid, text, isOwner) {
     return
   }
 
-  // Build prompt with group conversation history
-  const history = chatHistory.get(groupJid) || []
-  const prompt = buildPromptWithHistory(history, text)
-  appendHistory(groupJid, 'user', text)
+  const useEngram = engramAvailable()
+  let prompt, args
 
-  // Run claude with custom system prompt, no tools, and conversation history
+  if (useEngram) {
+    // Engram mode: merge group persona system prompt with Engram memory protocol
+    const engramPrompt = buildEngramSystemPrompt(groupJid, true)
+    const combinedSystemPrompt = `${systemPrompt}\n\n${engramPrompt}`
+    prompt = text
+    args = ['-p', prompt, '--system-prompt', combinedSystemPrompt]
+  } else {
+    // Fallback: in-RAM history + group persona system prompt
+    const history = chatHistory.get(groupJid) || []
+    prompt = buildPromptWithHistory(history, text)
+    appendHistory(groupJid, 'user', text)
+    args = ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', '']
+  }
+
   const spawnEnv = { ...process.env }
   delete spawnEnv.CLAUDECODE
   const response = await new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     const dexterRoot = path.resolve(__dirname, '../../../..')
-    const child = spawn(cli, ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', ''], {
+    const child = spawn(cli, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: dexterRoot,
       env: spawnEnv,
@@ -284,7 +295,7 @@ async function handleGroupChat(groupJid, text, isOwner) {
   })
 
   if (response) {
-    appendHistory(groupJid, 'assistant', response)
+    if (!useEngram) appendHistory(groupJid, 'assistant', response)
     const sent = await sock.sendMessage(groupJid, { text: response })
     if (sent?.key?.id) sentMsgIds.add(sent.key.id)
     logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
@@ -431,6 +442,32 @@ function runLLMCli(cli, message) {
   })
 }
 
+// ─── Engram availability check ────────────────────────────────────────────────
+
+function engramAvailable() {
+  // Engram is available if the binary exists in PATH
+  const isWin = process.platform === 'win32'
+  const r = spawnSync(isWin ? 'where' : 'which', ['engram'], { encoding: 'utf8', timeout: 3000 })
+  return r.status === 0 && !!r.stdout.trim()
+}
+
+// Builds a system prompt that instructs Claude to use Engram for persistent
+// memory across WhatsApp conversations. Claude will mem_search on start and
+// mem_save after responding — no raw history needed in the prompt.
+function buildEngramSystemPrompt(contactId, isGroup) {
+  const scope = isGroup ? 'group' : 'contact'
+  return `You are Dexter, a personal AI assistant responding via WhatsApp.
+You have access to Engram persistent memory tools (mem_search, mem_save, mem_context).
+
+MEMORY PROTOCOL — follow this on EVERY message:
+1. START: Call mem_search with query "${contactId}" and project "dexter-whatsapp" to load conversation context for this ${scope}.
+2. RESPOND: Use that context to give a coherent, continuous response. Never act like this is the first message if memory exists.
+3. END: Call mem_save to save a brief summary of this interaction (what was asked, what you did/answered) with project "dexter-whatsapp", topic_key "wa/${contactId}".
+
+This gives you persistent memory across server restarts — the conversation never loses its thread.
+If mem_search returns nothing, this is genuinely the first interaction with this ${scope}.`
+}
+
 // ─── Owner handler ────────────────────────────────────────────────────────────
 
 async function handleAllowedSender(senderJid, incomingText) {
@@ -444,16 +481,46 @@ async function handleAllowedSender(senderJid, incomingText) {
     return
   }
 
-  // Build prompt with conversation history so Claude remembers previous messages
-  const history = chatHistory.get(senderJid) || []
-  const prompt = buildPromptWithHistory(history, incomingText)
-  appendHistory(senderJid, 'user', incomingText)
+  const useEngram = engramAvailable()
+  let prompt, args
+
+  if (useEngram) {
+    // Engram mode: Claude manages its own memory via mem_search/mem_save.
+    // No raw history in the prompt — token-efficient and persistent across restarts.
+    const systemPrompt = buildEngramSystemPrompt(senderPhone, false)
+    prompt = incomingText
+    args = ['-p', prompt, '--system-prompt', systemPrompt]
+    console.log(`[Dexter] Engram mode — persistent memory active for ${senderPhone}`)
+  } else {
+    // Fallback: in-RAM conversation history (lost on server restart)
+    const history = chatHistory.get(senderJid) || []
+    prompt = buildPromptWithHistory(history, incomingText)
+    appendHistory(senderJid, 'user', incomingText)
+    args = ['-p', prompt]
+    console.log(`[Dexter] RAM history mode (Engram not found) for ${senderPhone}`)
+  }
 
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
-    const response = await runLLMCli(cli, prompt)
+    const spawnEnv = { ...process.env }
+    delete spawnEnv.CLAUDECODE
+    const dexterRoot = path.resolve(__dirname, '../../../..')
+    const response = await new Promise((resolve) => {
+      let stdout = '', stderr = ''
+      const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv })
+      const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] LLM timed out'); resolve(null) }, 120000)
+      child.stdout.on('data', d => { stdout += d.toString() })
+      child.stderr.on('data', d => { stderr += d.toString() })
+      child.on('close', (code) => {
+        clearTimeout(timer)
+        if (code === 0 && stdout.trim()) { resolve(stdout.trim()) }
+        else { if (stderr) console.error('[Dexter] LLM stderr:', stderr.substring(0, 300)); resolve(null) }
+      })
+      child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] spawn error:', err.message); resolve(null) })
+    })
+
     if (response) {
-      appendHistory(senderJid, 'assistant', response)
+      if (!useEngram) appendHistory(senderJid, 'assistant', response)
       const sent = await sock.sendMessage(senderJid, { text: response })
       if (sent?.key?.id) sentMsgIds.add(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
