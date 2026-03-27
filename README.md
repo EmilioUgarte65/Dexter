@@ -44,7 +44,7 @@ The installer auto-detects your agent and walks you through:
 | **System Prompt** | Injects Dexter into your agent's context |
 | **Skills** | Copies all 46 skills to `~/.claude/skills/` |
 | **Notifications** | Creates `~/.dexter/notifications.json` |
-| **WhatsApp** | Optional — QR pairing + persona setup |
+| **WhatsApp** | Optional — pairing code + persona setup |
 | **Webhooks & LLM Router** | Optional — incoming webhooks + provider fallback |
 | **MCPs** | Configures Engram memory + Context7 |
 | **Overlay** | Applies hooks, permissions, and settings |
@@ -94,7 +94,7 @@ The GitHub repo is the **onboarding manual** — identical for all users. Your D
 Two users installing Dexter get the same base agent. After a week of conversations, they have two completely different agents.
 
 ### 💬 WhatsApp Auto-Responder
-Works with any regular WhatsApp number — no Meta Business account needed. Scan a QR once, paired forever.
+Works with any regular WhatsApp number — no Meta Business account needed. Enter a pairing code once, paired forever.
 
 **Two access tiers:**
 - Numbers in `allowFrom` → full Dexter access
@@ -102,7 +102,7 @@ Works with any regular WhatsApp number — no Meta Business account needed. Scan
 
 ```bash
 bash ~/.claude/skills/communications/whatsapp/server/start.sh
-# First run shows QR → scan with phone → done
+# First run shows a pairing code → enter it in WhatsApp → done
 ```
 
 Configure your persona interactively:

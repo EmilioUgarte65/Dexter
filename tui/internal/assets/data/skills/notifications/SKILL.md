@@ -115,15 +115,15 @@ python3 ~/.claude/skills/notifications/scripts/notify.py \
 
 ## Setup — WhatsApp (Baileys — cualquier número, sin cuenta Meta)
 
-Dexter incluye un servidor Baileys mínimo. Funciona con cualquier número regular de WhatsApp — solo escaneás un QR una vez.
+Dexter incluye un servidor Baileys mínimo. Funciona con cualquier número regular de WhatsApp — solo ingresás un código de vinculación una vez.
 
-### Primera vez (QR pairing)
+### Primera vez (pairing code)
 
 ```bash
 bash ~/.claude/skills/communications/whatsapp/server/start.sh
 ```
 
-Aparece el QR en la terminal. En tu teléfono: **WhatsApp → Configuración → Dispositivos vinculados → Vincular dispositivo**. Escaneás y listo — las credenciales quedan en `~/.dexter/whatsapp/` para siempre.
+Aparece un código en la terminal. En tu teléfono: **WhatsApp → ⋮ → Dispositivos vinculados → Vincular con número de teléfono → ingresá el código**. Listo — las credenciales quedan en `~/.dexter/whatsapp/` para siempre.
 
 ### Inicio en background (arranque normal)
 

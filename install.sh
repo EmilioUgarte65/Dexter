@@ -335,7 +335,7 @@ setup_whatsapp() {
   echo ""
   success "WhatsApp server ready!"
   info "  Start it with: bash $server_dir/start.sh"
-  info "  First time: scan the QR code with WhatsApp → Settings → Linked Devices → Link a Device"
+  info "  First time: WhatsApp → ⋮ → Linked Devices → Link with phone number → enter the pairing code"
   info "  Background: bash $server_dir/start.sh --background"
   echo ""
 }

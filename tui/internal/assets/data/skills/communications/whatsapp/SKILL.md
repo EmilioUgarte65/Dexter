@@ -24,7 +24,7 @@ export WHATSAPP_API_URL="http://localhost:3000"   # default
 export WHATSAPP_SESSION="dexter"                  # default session name
 ```
 
-Start your Baileys server and scan the QR code once. After that, use Dexter to send.
+Start your Baileys server and enter the pairing code once. After that, use Dexter to send.
 
 ## Usage
 
@@ -51,4 +51,4 @@ Use international format **without** the `+` prefix:
 - `WHATSAPP_API_URL` — no trailing slash, default `http://localhost:3000`
 - `WHATSAPP_SESSION` — session name configured in your Baileys server, default `dexter`
 - Supported media: images (jpg, png, gif), video (mp4), audio (mp3, ogg), documents (pdf, docx)
-- The API must be running and authenticated (QR scanned) before sending
+- The API must be running and authenticated (pairing code entered) before sending
