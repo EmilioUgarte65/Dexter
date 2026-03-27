@@ -248,6 +248,7 @@ Skills are loaded **lazily** — only when context triggers them. CAPABILITIES.m
 | `security` | seguridad, auditoría, vulnerability, nmap, VirusTotal, hardening, plugin externo |
 | `ai-local` | Ollama, modelo local, optimizar tokens, clasificar, resumir (always active) |
 | `self-extend` | nueva skill, escribir skill, modificar skill, hot-reload, extender Dexter, skill-writer, generate skill, crear skill, no skill for, inventar skill, programar skill, write skill |
+| `gui-control` | gui run, computer use, interfaz grafica, automatizar pantalla, screenshot, click en pantalla |
 | `marketplace` | marketplace, buscar skill, instalar skill, install skill, hay una skill para, dexter install, browse skills, update skills, list installed, dexter marketplace |
 
 ### Loading Protocol

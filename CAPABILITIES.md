@@ -27,6 +27,7 @@
 | `skill-creator` | crear skill, nueva skill, create skill, new skill, haz una skill, skill para X, documentar workflow, recipe | skill-creator |
 | `social` | twitter, tweet, X, hilo twitter, linkedin, post linkedin, contenido linkedin, instagram, ig, foto instagram, story instagram | twitter-x, linkedin, instagram |
 | `research` | navegar, web browser, screenshot, scrape, fetch url, buscar web, generar reporte, report, informe, documento, agregar datos, data aggregator, merge data, fetch api, consolidar datos | web-browser, report-generator, data-aggregator |
+| `gui-control` | gui run, computer use, interfaz grafica, click, screenshot, automatizar pantalla | gui |
 | `knowledge` | base de conocimiento, personal kb, knowledge base, guardar conocimiento, buscar en mis notas, transcribir, transcripción, meeting, reunión, audio a texto, whisper | personal-kb, meeting-transcription |
 | `self-extend` | modificar skill, editar skill, actualizar triggers, skill modifier, recargar skill, hot reload, activar skill, skill reload, self-correct, autocorregir, loop correctivo | skill-modifier, skill-hot-reload, self-correct-loop |
 | `marketplace` | instalar skill, buscar skill, dexter marketplace, clawhub, clawflows, community skill, skill de github | marketplace |
