@@ -32,6 +32,8 @@ function Detect-Agent {
   if ($Agent) { return $Agent }
 
   $appData = $env:APPDATA
+  # Claude Code CLI uses ~/.claude (USERPROFILE), not %APPDATA%\Claude
+  if (Test-Path "$env:USERPROFILE\.claude") { return "claude-code" }
   if (Test-Path "$appData\Claude") { return "claude-code" }
   if (Test-Path "$appData\OpenCode") { return "opencode" }
   if (Test-Path "$env:USERPROFILE\.codex") { return "codex" }
@@ -49,12 +51,13 @@ function Get-AgentPaths {
 
   switch ($AgentName) {
     "claude-code" {
+      # Claude Code CLI reads config from ~/.claude (USERPROFILE), not %APPDATA%\Claude
       return @{
-        ConfigDir    = "$appData\Claude"
-        PromptFile   = "$appData\Claude\CLAUDE.md"
-        SkillsDir    = "$appData\Claude\skills"
-        SettingsFile = "$appData\Claude\settings.json"
-        McpDir       = "$appData\Claude\mcp"
+        ConfigDir    = "$home\.claude"
+        PromptFile   = "$home\.claude\CLAUDE.md"
+        SkillsDir    = "$home\.claude\skills"
+        SettingsFile = "$home\.claude\settings.json"
+        McpDir       = "$home\.claude\mcp"
         Strategy     = "MarkdownSections"
         McpStrategy  = "SeparateMCPFiles"
       }
