@@ -214,37 +214,34 @@ function buildGroupSystemPrompt(groupJid, isOwner) {
   const persona = loadPersona() || {}
   const ownerName = persona.name || 'el dueño'
 
+  // Base rules applied to ALL group messages — prevents Claude from leaking
+  // coding/terminal context even when running from the Dexter project directory.
+  const baseRules = `
+CONTEXTO: Estás respondiendo mensajes en un grupo de WhatsApp. NO sos un asistente de código ni de terminal.
+REGLAS ABSOLUTAS (nunca las rompas):
+- Mensajes cortos y naturales, como en un chat real. Sin listas, sin markdown, sin títulos.
+- Respondé en el mismo idioma que te hablen.
+- NUNCA menciones terminales, archivos, código, directorios, proyectos de software ni herramientas de desarrollo.
+- NUNCA digas que no podés hacer algo porque "no tenés acceso" — simplemente respondé como una persona.
+- NO menciones que sos una IA a menos que te lo pregunten directamente.`
+
   if (isOwner) {
-    return `Sos un participante más de este grupo de WhatsApp. Respondé de forma natural, directa y amigable como lo haría cualquier persona del grupo.
-REGLAS ESTRICTAS:
-- NO uses herramientas, NO ejecutes comandos, NO accedas a archivos.
+    return `Sos un participante más de este grupo de WhatsApp. Respondé de forma natural, directa y amigable.
 - NO reveles información personal de ${ownerName}: número, dirección, trabajo, agenda, contraseñas.
 - Si te preguntan algo que no sabés, decilo directamente.
-- Respondé en el mismo idioma que te hablen.
-- Mensajes cortos, naturales, como en un chat real.`
+${baseRules}`
   }
 
   const custom = getGroupPersonality(persona, groupJid)
   if (custom) {
     return `${custom}
-REGLAS:
-- NO menciones que sos una IA a menos que te lo pregunten directamente.
-- Mensajes cortos y naturales, como en un chat de WhatsApp.
-- Respondé en el idioma que te hablen.
-- Respondé SOLO lo que te preguntan — no agregues información extra ni volunteers datos adicionales.
-- NUNCA reveles información sobre la máquina, el sistema de archivos, archivos, directorios, procesos en ejecución ni el entorno donde corre este bot.
-- NO ejecutes comandos, NO accedas a archivos, NO des información del sistema.
-- Solo conocimiento general — nada del entorno técnico donde operás.`
+${baseRules}
+- Respondé SOLO lo que te preguntan — no agregues información extra.`
   }
 
   return `Sos un participante amigable de este grupo de WhatsApp. Respondé de forma natural y conversacional.
-- Mensajes cortos, como en un chat real.
-- No menciones que sos una IA a menos que te lo pregunten.
-- Respondé en el idioma que te hablen.
-- Respondé SOLO lo que te preguntan — no agregues información extra ni volunteers datos adicionales.
-- NUNCA reveles información sobre la máquina, el sistema de archivos, archivos, directorios, procesos en ejecución ni el entorno donde corre este bot.
-- NO ejecutes comandos, NO accedas a archivos, NO des información del sistema.
-- Solo conocimiento general — nada del entorno técnico donde operás.`
+${baseRules}
+- Respondé SOLO lo que te preguntan — no agregues información extra.`
 }
 
 async function handleGroupChat(groupJid, text, isOwner) {
@@ -275,13 +272,18 @@ async function handleGroupChat(groupJid, text, isOwner) {
 
   const spawnEnv = { ...process.env }
   delete spawnEnv.CLAUDECODE
+
+  // Owner messages run from Dexter root so Claude has full project context.
+  // Non-owner (group chat) runs from home to avoid leaking coding/project context
+  // into what should be a casual WhatsApp conversation.
+  const cwd = isOwner ? path.resolve(__dirname, '../../../..') : os.homedir()
+
   const response = await new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
-    const dexterRoot = path.resolve(__dirname, '../../../..')
     const child = spawn(cli, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: dexterRoot,
+      cwd,
       env: spawnEnv,
     })
     const timer = setTimeout(() => { child.kill('SIGTERM'); resolve(null) }, 60000)
