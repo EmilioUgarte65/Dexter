@@ -69,7 +69,8 @@ Credentials are saved in `~/.dexter/whatsapp/` — subsequent starts connect aut
 | Self-chat (own number) | Same as above — write to yourself and Dexter responds |
 | Unknown numbers | Ignored unless they say `"dexter"` — then gets `stranger_reply` |
 | Groups (not enabled) | Fully ignored |
-| Groups (enabled) | Responds when someone says `"dexter"` |
+| Groups (enabled) — owner message | Full unrestricted Dexter response, same as direct messages (`runLLMCli`, full tool access, no system prompt restrictions) |
+| Groups (enabled) — non-owner message | Restricted response: answers only what is asked, no extra info. Never reveals machine, filesystem, or system information. No command execution. General knowledge only. |
 
 ### Phone number matching
 
@@ -97,6 +98,13 @@ Enable or disable Dexter in any group by sending a command from your phone:
 | `dexter leave` | Disables Dexter in this group. |
 
 Once a group is enabled, anyone in it can interact with Dexter by mentioning `"dexter"` in their message.
+
+### Group response tiers
+
+Responses differ based on who sends the message in an enabled group:
+
+- **Owner** (your number): Full Dexter response — identical to a direct message. `runLLMCli` is invoked with no system prompt restrictions and full tool access.
+- **Non-owner**: Restricted mode. Dexter answers only what was asked with no extra information. It never reveals machine details, filesystem paths, or any system information, and will not execute commands. Responses are limited to general knowledge.
 
 ---
 

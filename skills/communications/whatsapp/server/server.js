@@ -225,13 +225,21 @@ REGLAS ESTRICTAS:
 REGLAS:
 - NO menciones que sos una IA a menos que te lo pregunten directamente.
 - Mensajes cortos y naturales, como en un chat de WhatsApp.
-- Respondé en el idioma que te hablen.`
+- Respondé en el idioma que te hablen.
+- Respondé SOLO lo que te preguntan — no agregues información extra ni volunteers datos adicionales.
+- NUNCA reveles información sobre la máquina, el sistema de archivos, archivos, directorios, procesos en ejecución ni el entorno donde corre este bot.
+- NO ejecutes comandos, NO accedas a archivos, NO des información del sistema.
+- Solo conocimiento general — nada del entorno técnico donde operás.`
   }
 
   return `Sos un participante amigable de este grupo de WhatsApp. Respondé de forma natural y conversacional.
 - Mensajes cortos, como en un chat real.
 - No menciones que sos una IA a menos que te lo pregunten.
-- Respondé en el idioma que te hablen.`
+- Respondé en el idioma que te hablen.
+- Respondé SOLO lo que te preguntan — no agregues información extra ni volunteers datos adicionales.
+- NUNCA reveles información sobre la máquina, el sistema de archivos, archivos, directorios, procesos en ejecución ni el entorno donde corre este bot.
+- NO ejecutes comandos, NO accedas a archivos, NO des información del sistema.
+- Solo conocimiento general — nada del entorno técnico donde operás.`
 }
 
 async function handleGroupChat(groupJid, text, isOwner) {
@@ -616,8 +624,25 @@ async function connect() {
         }
 
         if (isOwner) {
-          // Owner: free conversation, no tools, no personal info
-          await handleGroupChat(groupJid, groupText, true)
+          // Owner: full unrestricted Dexter experience (same as direct messages)
+          const cli = detectLLMCli()
+          if (!cli) {
+            console.warn('[Dexter] No LLM CLI found for owner group response')
+          } else {
+            console.log(`[Dexter] Owner group message — thinking with ${cli}...`)
+            try {
+              const response = await runLLMCli(cli, groupText)
+              if (response) {
+                const sent = await sock.sendMessage(groupJid, { text: response })
+                if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+                logMessage({ direction: 'out', to: groupJid, text: response, tier: 'owner-group' })
+              } else {
+                console.warn('[Dexter] LLM returned empty response for owner group message')
+              }
+            } catch (e) {
+              console.error('[Dexter] Owner group handler error:', e.message)
+            }
+          }
         } else {
           // Strangers: require wake word, use group personality
           const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
