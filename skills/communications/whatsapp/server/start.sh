@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dexter WhatsApp Server — install deps + start
-# Usage: bash start.sh [--port 3001] [--background]
+# Usage: bash start.sh [--port 3001] [--background] [--install-service]
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,11 +8,15 @@ cd "$DIR"
 
 PORT=3000
 BACKGROUND=false
+INSTALL_SERVICE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
     --background) BACKGROUND=true; shift ;;
+    # Registers the WhatsApp server as a system service so it survives
+    # terminal closes and restarts automatically on boot.
+    --install-service) INSTALL_SERVICE=true; shift ;;
     *) echo "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -22,6 +26,96 @@ if [[ ! -d node_modules ]]; then
   echo "[Dexter] Installing WhatsApp server dependencies..."
   npm install --silent
   echo "[Dexter] Done."
+fi
+
+# ─── Service registration ──────────────────────────────────────────────────────
+# Supports systemd (Linux) and launchd (macOS).
+# After registration the server starts automatically on boot and restarts
+# if it crashes, without needing an open terminal.
+install_service() {
+  local os
+  os="$(uname -s)"
+
+  if [[ "$os" == "Linux" ]] && command -v systemctl &>/dev/null; then
+    # systemd — writes a user-level service unit (no sudo required)
+    local unit_dir="$HOME/.config/systemd/user"
+    local unit_file="$unit_dir/dexter-whatsapp.service"
+    mkdir -p "$unit_dir"
+    cat > "$unit_file" <<EOF
+[Unit]
+Description=Dexter WhatsApp Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$DIR
+ExecStart=$(command -v node) $DIR/server.js
+Environment=WA_PORT=$PORT
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:$HOME/.dexter/whatsapp-server.log
+StandardError=append:$HOME/.dexter/whatsapp-server.log
+
+[Install]
+WantedBy=default.target
+EOF
+    systemctl --user daemon-reload
+    systemctl --user enable dexter-whatsapp
+    systemctl --user start dexter-whatsapp
+    echo "[Dexter] systemd service registered and started."
+    echo "[Dexter] Manage with: systemctl --user {start|stop|status|restart} dexter-whatsapp"
+    echo "[Dexter] Logs: journalctl --user -u dexter-whatsapp -f"
+
+  elif [[ "$os" == "Darwin" ]]; then
+    # launchd — writes a LaunchAgent plist so it starts on login
+    local plist_dir="$HOME/Library/LaunchAgents"
+    local plist_file="$plist_dir/sh.dexter.whatsapp.plist"
+    mkdir -p "$plist_dir"
+    cat > "$plist_file" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>sh.dexter.whatsapp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$(command -v node)</string>
+    <string>$DIR/server.js</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>$DIR</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>WA_PORT</key>
+    <string>$PORT</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>$HOME/.dexter/whatsapp-server.log</string>
+  <key>StandardErrorPath</key>
+  <string>$HOME/.dexter/whatsapp-server.log</string>
+</dict>
+</plist>
+EOF
+    launchctl load "$plist_file"
+    echo "[Dexter] launchd agent registered and started."
+    echo "[Dexter] Manage with: launchctl {start|stop} sh.dexter.whatsapp"
+    echo "[Dexter] Logs: tail -f ~/.dexter/whatsapp-server.log"
+
+  else
+    echo "[Dexter] Auto-service not supported on this OS."
+    echo "[Dexter] Start manually: bash $DIR/start.sh --background"
+  fi
+}
+
+if [[ "$INSTALL_SERVICE" == true ]]; then
+  install_service
+  exit 0
 fi
 
 if [[ "$BACKGROUND" == true ]]; then
