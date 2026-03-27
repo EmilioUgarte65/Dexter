@@ -767,16 +767,15 @@ async function connect() {
           continue
         }
 
+        // Both owner and non-owner must use the wake word in groups.
+        // This prevents Dexter from interrupting every message in the conversation.
+        // Difference: owner gets full machine/file access, others get restricted access.
+        const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
+        if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
+
         if (isOwner) {
-          // Owner: full Dexter access (machine, files) + group conversation context.
-          // Goes through handleGroupChat(isOwner=true) so it shares the same
-          // Engram/RAM history as the rest of the group conversation.
           await handleGroupChat(groupJid, groupText, true)
         } else {
-          // Non-owner: must use wake word "dexter" to get a response.
-          // Responds as a group participant — no machine/file access.
-          const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
-          if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
           await handleGroupChat(groupJid, groupText, false)
         }
         continue
