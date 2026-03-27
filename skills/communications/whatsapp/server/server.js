@@ -264,13 +264,13 @@ async function handleGroupChat(groupJid, text, isOwner) {
     const engramPrompt = buildEngramSystemPrompt(groupJid, true)
     const combinedSystemPrompt = `${systemPrompt}\n\n${engramPrompt}`
     prompt = text
-    args = ['-p', prompt, '--system-prompt', combinedSystemPrompt]
+    args = ['-p', prompt, '--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
   } else {
     // Fallback: in-RAM history + group persona system prompt
     const history = chatHistory.get(groupJid) || []
     prompt = buildPromptWithHistory(history, text)
     appendHistory(groupJid, 'user', text)
-    args = ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', '']
+    args = ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   }
 
   const spawnEnv = { ...process.env }
@@ -487,16 +487,18 @@ async function handleAllowedSender(senderJid, incomingText) {
   if (useEngram) {
     // Engram mode: Claude manages its own memory via mem_search/mem_save.
     // No raw history in the prompt — token-efficient and persistent across restarts.
+    // --dangerously-skip-permissions: no interactive prompts in headless mode.
     const systemPrompt = buildEngramSystemPrompt(senderPhone, false)
     prompt = incomingText
-    args = ['-p', prompt, '--system-prompt', systemPrompt]
+    args = ['-p', prompt, '--system-prompt', systemPrompt, '--dangerously-skip-permissions']
     console.log(`[Dexter] Engram mode — persistent memory active for ${senderPhone}`)
   } else {
-    // Fallback: in-RAM conversation history (lost on server restart)
+    // Fallback: in-RAM conversation history (lost on server restart).
+    // --dangerously-skip-permissions: no interactive prompts in headless mode.
     const history = chatHistory.get(senderJid) || []
     prompt = buildPromptWithHistory(history, incomingText)
     appendHistory(senderJid, 'user', incomingText)
-    args = ['-p', prompt]
+    args = ['-p', prompt, '--dangerously-skip-permissions']
     console.log(`[Dexter] RAM history mode (Engram not found) for ${senderPhone}`)
   }
 
