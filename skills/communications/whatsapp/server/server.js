@@ -47,6 +47,11 @@ let waitingForPairing = false
 const lidToPhone   = new Map()  // LID (raw) → "+phone" — populated from contacts.upsert
 const sentMsgIds   = new Set()  // IDs of messages Dexter sent — skip on echo to prevent loops
 
+// Per-chat conversation history — keeps the last N turns so Claude has context.
+// Key: senderJid, Value: Array of { role: 'user'|'assistant', text: string }
+const chatHistory  = new Map()
+const HISTORY_LIMIT = 20  // max turns to keep per chat
+
 function waitForEnter(prompt) {
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -251,14 +256,22 @@ async function handleGroupChat(groupJid, text, isOwner) {
     return
   }
 
-  // Run claude with custom system prompt and no tools
+  // Build prompt with group conversation history
+  const history = chatHistory.get(groupJid) || []
+  const prompt = buildPromptWithHistory(history, text)
+  appendHistory(groupJid, 'user', text)
+
+  // Run claude with custom system prompt, no tools, and conversation history
+  const spawnEnv = { ...process.env }
+  delete spawnEnv.CLAUDECODE
   const response = await new Promise((resolve) => {
     let stdout = ''
     let stderr = ''
     const dexterRoot = path.resolve(__dirname, '../../../..')
-    const child = spawn(cli, ['-p', text, '--system-prompt', systemPrompt, '--allowedTools', ''], {
+    const child = spawn(cli, ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', ''], {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: dexterRoot,
+      env: spawnEnv,
     })
     const timer = setTimeout(() => { child.kill('SIGTERM'); resolve(null) }, 60000)
     child.stdout.on('data', d => { stdout += d.toString() })
@@ -271,6 +284,7 @@ async function handleGroupChat(groupJid, text, isOwner) {
   })
 
   if (response) {
+    appendHistory(groupJid, 'assistant', response)
     const sent = await sock.sendMessage(groupJid, { text: response })
     if (sent?.key?.id) sentMsgIds.add(sent.key.id)
     logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
@@ -358,6 +372,22 @@ function detectLLMCli() {
   return null
 }
 
+// Builds a prompt string that includes recent conversation history so Claude
+// has context across multiple WhatsApp messages from the same sender.
+function buildPromptWithHistory(history, newMessage) {
+  if (!history || history.length === 0) return newMessage
+  const lines = history.map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.text}`)
+  return `Conversation so far:\n${lines.join('\n')}\n\nUser: ${newMessage}`
+}
+
+// Appends a turn to the per-chat history and trims to HISTORY_LIMIT.
+function appendHistory(jid, role, text) {
+  if (!chatHistory.has(jid)) chatHistory.set(jid, [])
+  const history = chatHistory.get(jid)
+  history.push({ role, text })
+  if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT)
+}
+
 function runLLMCli(cli, message) {
   return new Promise((resolve) => {
     let stdout = ''
@@ -414,10 +444,16 @@ async function handleAllowedSender(senderJid, incomingText) {
     return
   }
 
+  // Build prompt with conversation history so Claude remembers previous messages
+  const history = chatHistory.get(senderJid) || []
+  const prompt = buildPromptWithHistory(history, incomingText)
+  appendHistory(senderJid, 'user', incomingText)
+
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
-    const response = await runLLMCli(cli, incomingText)
+    const response = await runLLMCli(cli, prompt)
     if (response) {
+      appendHistory(senderJid, 'assistant', response)
       const sent = await sock.sendMessage(senderJid, { text: response })
       if (sent?.key?.id) sentMsgIds.add(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
