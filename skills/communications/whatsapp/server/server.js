@@ -605,10 +605,11 @@ async function connect() {
             continue
           }
           if (/^dexter\s+leave$/i.test(groupText.trim())) {
+            // Only removes the group from allowedGroups — Dexter stops responding
+            // but your number stays in the group.
             persona.allowedGroups = (persona.allowedGroups || []).filter(g => g !== groupJid)
             savePersona(persona)
-            await sock.sendMessage(groupJid, { text: '👋 Hasta luego!' })
-            await sock.groupLeave(groupJid)
+            await sock.sendMessage(groupJid, { text: '👋 Dexter desactivado en este grupo.' })
             continue
           }
         }
