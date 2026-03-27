@@ -320,11 +320,14 @@ async function handleUnknownSender(senderJid, incomingText) {
 
 function detectLLMCli() {
   // Priority: DEXTER_AGENT env → claude → opencode
+  // Uses 'where' on Windows and 'which' on Unix to locate the CLI binary.
   const env = process.env.DEXTER_AGENT
   if (env) return env
+  const isWin = process.platform === 'win32'
+  const finder = isWin ? 'where' : 'which'
   for (const cli of ['claude', 'opencode']) {
     try {
-      const r = spawnSync('which', [cli], { encoding: 'utf8', timeout: 3000 })
+      const r = spawnSync(finder, [cli], { encoding: 'utf8', timeout: 3000 })
       if (r.status === 0 && r.stdout.trim()) return cli
     } catch (_) {}
   }
