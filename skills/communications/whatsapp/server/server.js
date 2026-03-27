@@ -248,13 +248,28 @@ ${baseRules}
 - Respondé SOLO lo que te preguntan — no agregues información extra.`
 }
 
-async function handleGroupChat(groupJid, text, isOwner) {
+async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
   const systemPrompt = buildGroupSystemPrompt(groupJid, isOwner)
   const cli = detectLLMCli()
 
   if (!cli) {
     console.warn('[Dexter] No LLM CLI found for group response')
     return
+  }
+
+  // If an image was sent in the group, download and process it directly
+  if (imageMsg) {
+    const imagePath = await downloadImage(imageMsg)
+    if (imagePath) {
+      const imagePrompt = text.trim() || 'Describe esta imagen.'
+      const response = await runLLMCliWithImage(cli, imagePrompt, imagePath)
+      if (response) {
+        const sent = await sock.sendMessage(groupJid, { text: response })
+        if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+        logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
+      }
+      return
+    }
   }
 
   const useEngram = engramAvailable()
@@ -431,6 +446,45 @@ function appendHistory(jid, role, text) {
   if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT)
 }
 
+// Downloads a WhatsApp image message to a temp file and returns the path.
+// Returns null if download fails.
+async function downloadImage(msg) {
+  try {
+    const { downloadMediaMessage } = require('@whiskeysockets/baileys')
+    const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: { info: () => {}, error: () => {} } })
+    const ext  = msg.message.imageMessage?.mimetype?.includes('png') ? 'png' : 'jpg'
+    const file = path.join(os.tmpdir(), `dexter-wa-${Date.now()}.${ext}`)
+    fs.writeFileSync(file, buffer)
+    return file
+  } catch (e) {
+    console.error('[Dexter] Image download error:', e.message)
+    return null
+  }
+}
+
+// Runs the LLM CLI with an image attachment.
+// Cleans up the temp file after the call.
+function runLLMCliWithImage(cli, prompt, imagePath) {
+  return new Promise((resolve) => {
+    let stdout = '', stderr = ''
+    const dexterRoot = path.resolve(__dirname, '../../../..')
+    const spawnEnv = { ...process.env }
+    delete spawnEnv.CLAUDECODE
+    const args = ['-p', prompt, '--image', imagePath, '--dangerously-skip-permissions']
+    const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv })
+    const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] Image LLM timed out'); resolve(null) }, 120000)
+    child.stdout.on('data', d => { stdout += d.toString() })
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      try { fs.unlinkSync(imagePath) } catch (_) {}  // clean up temp file
+      if (code === 0 && stdout.trim()) { resolve(stdout.trim()) }
+      else { if (stderr) console.error('[Dexter] Image LLM stderr:', stderr.substring(0, 300)); resolve(null) }
+    })
+    child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] Image spawn error:', err.message); resolve(null) })
+  })
+}
+
 function runLLMCli(cli, message) {
   return new Promise((resolve) => {
     let stdout = ''
@@ -502,10 +556,10 @@ If mem_search returns nothing, this is genuinely the first interaction with this
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
 
-async function handleAllowedSender(senderJid, incomingText) {
+async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
   const senderPhone = fromJid(senderJid)
-  logMessage({ direction: 'in', from: senderPhone, text: incomingText, tier: 'allowed' })
-  console.log(`[Dexter] Message from ${senderPhone} (allowed): ${incomingText.substring(0, 60)}`)
+  logMessage({ direction: 'in', from: senderPhone, text: incomingText || '[image]', tier: 'allowed' })
+  console.log(`[Dexter] Message from ${senderPhone} (allowed): ${(incomingText || '[image]').substring(0, 60)}`)
 
   const cli = detectLLMCli()
   if (!cli) {
@@ -536,6 +590,25 @@ async function handleAllowedSender(senderJid, incomingText) {
 
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
+    // If an image was sent, download it and pass it to Claude directly.
+    // Skips Engram/RAM prompt building — image + caption is the full context.
+    if (imageMsg) {
+      const imagePath = await downloadImage(imageMsg)
+      if (imagePath) {
+        const imagePrompt = incomingText.trim() || 'Describe esta imagen.'
+        const response = await runLLMCliWithImage(cli, imagePrompt, imagePath)
+        if (response) {
+          const sent = await sock.sendMessage(senderJid, { text: response })
+          if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+          logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
+          console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
+        } else {
+          console.warn('[Dexter] LLM returned empty response for image')
+        }
+        return
+      }
+    }
+
     const spawnEnv = { ...process.env }
     delete spawnEnv.CLAUDECODE
     const dexterRoot = path.resolve(__dirname, '../../../..')
@@ -743,9 +816,10 @@ async function connect() {
       }
 
       if (msg.key.remoteJid?.endsWith('@g.us')) {
-        const groupJid  = msg.key.remoteJid
-        const groupText = msg.message?.conversation || msg.message?.extendedTextMessage?.text || ''
-        if (!groupText.trim()) continue
+        const groupJid   = msg.key.remoteJid
+        const groupText  = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || ''
+        const groupImage = msg.message?.imageMessage ? msg : null
+        if (!groupText.trim() && !groupImage) continue
 
         const persona      = loadPersona() || {}
         const allowFrom    = (persona.allowFrom || []).map(n => n.replace(/\s/g, ''))
@@ -800,9 +874,9 @@ async function connect() {
         if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
 
         if (isOwner) {
-          await handleGroupChat(groupJid, groupText, true)
+          await handleGroupChat(groupJid, groupText, true, groupImage)
         } else {
-          await handleGroupChat(groupJid, groupText, false)
+          await handleGroupChat(groupJid, groupText, false, groupImage)
         }
         continue
       }
@@ -810,9 +884,12 @@ async function connect() {
       const senderJid = msg.key.remoteJid
       const text = msg.message?.conversation
         || msg.message?.extendedTextMessage?.text
+        || msg.message?.imageMessage?.caption
         || ''
+      const hasImage = !!msg.message?.imageMessage
 
-      if (!text.trim()) continue
+      // Skip if no text and no image
+      if (!text.trim() && !hasImage) continue
 
       const persona = loadPersona()
       const cfg = loadConfig()
@@ -840,7 +917,7 @@ async function connect() {
       console.log(`[Dexter] msg — jid:${senderJid} resolved:${resolvedPhone} allowed:${isAllowed}`)
 
       if (isAllowed) {
-        await handleAllowedSender(senderJid, text)
+        await handleAllowedSender(senderJid, text, hasImage ? msg : null)
       } else {
         // Strangers: only respond if they explicitly mention the wake word (default: "dexter")
         const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
