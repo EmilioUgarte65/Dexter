@@ -29,6 +29,8 @@
 | `research` | navegar, web browser, screenshot, scrape, fetch url, buscar web, generar reporte, report, informe, documento, agregar datos, data aggregator, merge data, fetch api, consolidar datos | web-browser, report-generator, data-aggregator |
 | `knowledge` | base de conocimiento, personal kb, knowledge base, guardar conocimiento, buscar en mis notas, transcribir, transcripción, meeting, reunión, audio a texto, whisper | personal-kb, meeting-transcription |
 | `self-extend` | modificar skill, editar skill, actualizar triggers, skill modifier, recargar skill, hot reload, activar skill, skill reload, self-correct, autocorregir, loop correctivo | skill-modifier, skill-hot-reload, self-correct-loop |
+| `marketplace` | instalar skill, buscar skill, dexter marketplace, clawhub, clawflows, community skill, skill de github | marketplace |
+| `skill-writer` | generar skill, auto-generate skill, crear skill automáticamente, no tengo skill para, skill-writer | skill-writer |
 
 ## Plugin Compatibility
 
