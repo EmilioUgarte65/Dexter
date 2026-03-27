@@ -191,6 +191,84 @@ IMPORTANTE:
 - No menciones que sos una IA ni un asistente automático a menos que te lo pregunten directamente.`
 }
 
+// ─── Group chat ───────────────────────────────────────────────────────────────
+
+function getGroupPersonality(persona, groupJid) {
+  return persona?.groups?.[groupJid]?.personality || null
+}
+
+function setGroupPersonality(groupJid, personality) {
+  const persona = loadPersona() || {}
+  if (!persona.groups) persona.groups = {}
+  if (!persona.groups[groupJid]) persona.groups[groupJid] = {}
+  persona.groups[groupJid].personality = personality
+  savePersona(persona)
+}
+
+function buildGroupSystemPrompt(groupJid, isOwner) {
+  const persona = loadPersona() || {}
+  const ownerName = persona.name || 'el dueño'
+
+  if (isOwner) {
+    return `Sos un participante más de este grupo de WhatsApp. Respondé de forma natural, directa y amigable como lo haría cualquier persona del grupo.
+REGLAS ESTRICTAS:
+- NO uses herramientas, NO ejecutes comandos, NO accedas a archivos.
+- NO reveles información personal de ${ownerName}: número, dirección, trabajo, agenda, contraseñas.
+- Si te preguntan algo que no sabés, decilo directamente.
+- Respondé en el mismo idioma que te hablen.
+- Mensajes cortos, naturales, como en un chat real.`
+  }
+
+  const custom = getGroupPersonality(persona, groupJid)
+  if (custom) {
+    return `${custom}
+REGLAS:
+- NO menciones que sos una IA a menos que te lo pregunten directamente.
+- Mensajes cortos y naturales, como en un chat de WhatsApp.
+- Respondé en el idioma que te hablen.`
+  }
+
+  return `Sos un participante amigable de este grupo de WhatsApp. Respondé de forma natural y conversacional.
+- Mensajes cortos, como en un chat real.
+- No menciones que sos una IA a menos que te lo pregunten.
+- Respondé en el idioma que te hablen.`
+}
+
+async function handleGroupChat(groupJid, text, isOwner) {
+  const systemPrompt = buildGroupSystemPrompt(groupJid, isOwner)
+  const cli = detectLLMCli()
+
+  if (!cli) {
+    console.warn('[Dexter] No LLM CLI found for group response')
+    return
+  }
+
+  // Run claude with custom system prompt and no tools
+  const response = await new Promise((resolve) => {
+    let stdout = ''
+    let stderr = ''
+    const dexterRoot = path.resolve(__dirname, '../../../..')
+    const child = spawn(cli, ['-p', text, '--system-prompt', systemPrompt, '--allowedTools', ''], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: dexterRoot,
+    })
+    const timer = setTimeout(() => { child.kill('SIGTERM'); resolve(null) }, 60000)
+    child.stdout.on('data', d => { stdout += d.toString() })
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      resolve(code === 0 && stdout.trim() ? stdout.trim() : null)
+    })
+    child.on('error', () => { clearTimeout(timer); resolve(null) })
+  })
+
+  if (response) {
+    const sent = await sock.sendMessage(groupJid, { text: response })
+    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+    logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
+  }
+}
+
 // ─── Persona responder ────────────────────────────────────────────────────────
 
 async function handleUnknownSender(senderJid, incomingText) {
@@ -528,14 +606,23 @@ async function connect() {
         const allowedGroups = persona.allowedGroups || []
         if (!allowedGroups.includes(groupJid)) continue
 
+        // "dexter eres [personalidad]" — anyone can set the group personality
+        const eresMatch = groupText.match(/^dexter\s+eres\s+(.+)/i)
+        if (eresMatch) {
+          setGroupPersonality(groupJid, eresMatch[1].trim())
+          const sent = await sock.sendMessage(groupJid, { text: '✅ Personalidad actualizada.' })
+          if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+          continue
+        }
+
         if (isOwner) {
-          // Owner in an allowed group → full AI response, no wake word needed
-          await handleAllowedSender(groupJid, groupText)
+          // Owner: free conversation, no tools, no personal info
+          await handleGroupChat(groupJid, groupText, true)
         } else {
-          // Strangers: require wake word
+          // Strangers: require wake word, use group personality
           const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
           if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
-          await handleUnknownSender(groupJid, groupText)
+          await handleGroupChat(groupJid, groupText, false)
         }
         continue
       }
