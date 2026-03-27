@@ -226,10 +226,14 @@ REGLAS ABSOLUTAS (nunca las rompas):
 - NO menciones que sos una IA a menos que te lo pregunten directamente.`
 
   if (isOwner) {
-    return `Sos un participante más de este grupo de WhatsApp. Respondé de forma natural, directa y amigable.
-- NO reveles información personal de ${ownerName}: número, dirección, trabajo, agenda, contraseñas.
-- Si te preguntan algo que no sabés, decilo directamente.
-${baseRules}`
+    // Owner gets full Dexter capabilities (machine, files, code) AND group context.
+    // baseRules NOT applied — owner is allowed to ask about the machine/files.
+    return `Sos Dexter, el asistente personal de ${ownerName}. Estás respondiendo en un grupo de WhatsApp.
+- Tenés acceso completo: archivos, terminal, código, búsquedas, lo que necesite.
+- Respondé en el mismo idioma que te hablen.
+- Mensajes concisos — estás en un chat, no en una terminal.
+- NO reveles información privada de ${ownerName} (contraseñas, datos personales sensibles) a otros miembros del grupo.
+- Mantené el contexto de la conversación del grupo.`
   }
 
   const custom = getGroupPersonality(persona, groupJid)
@@ -764,27 +768,13 @@ async function connect() {
         }
 
         if (isOwner) {
-          // Owner: full unrestricted Dexter experience (same as direct messages)
-          const cli = detectLLMCli()
-          if (!cli) {
-            console.warn('[Dexter] No LLM CLI found for owner group response')
-          } else {
-            console.log(`[Dexter] Owner group message — thinking with ${cli}...`)
-            try {
-              const response = await runLLMCli(cli, groupText)
-              if (response) {
-                const sent = await sock.sendMessage(groupJid, { text: response })
-                if (sent?.key?.id) sentMsgIds.add(sent.key.id)
-                logMessage({ direction: 'out', to: groupJid, text: response, tier: 'owner-group' })
-              } else {
-                console.warn('[Dexter] LLM returned empty response for owner group message')
-              }
-            } catch (e) {
-              console.error('[Dexter] Owner group handler error:', e.message)
-            }
-          }
+          // Owner: full Dexter access (machine, files) + group conversation context.
+          // Goes through handleGroupChat(isOwner=true) so it shares the same
+          // Engram/RAM history as the rest of the group conversation.
+          await handleGroupChat(groupJid, groupText, true)
         } else {
-          // Strangers: require wake word, use group personality
+          // Non-owner: must use wake word "dexter" to get a response.
+          // Responds as a group participant — no machine/file access.
           const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
           if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
           await handleGroupChat(groupJid, groupText, false)
