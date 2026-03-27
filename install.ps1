@@ -270,6 +270,72 @@ args = ["-y", "@upstash/context7-mcp"]
   }
 }
 
+# ─── WhatsApp server setup ─────────────────────────────────────────────────────
+function Setup-WhatsApp {
+  $serverDir = Join-Path $PSScriptRoot "skills\communications\whatsapp\server"
+
+  # Skip if the WhatsApp server is not bundled
+  if (-not (Test-Path (Join-Path $serverDir "package.json"))) { return }
+  if ($DryRun) { Info "[dry-run] Would set up WhatsApp server at $serverDir"; return }
+
+  $answer = Read-Host "[Dexter] Set up WhatsApp notifications? (any regular WhatsApp number) [y/N]"
+  if ($answer.ToLower() -ne "y") {
+    Info "  Skipping WhatsApp setup. Run later from $serverDir"
+    return
+  }
+
+  # Install Node.js via winget if missing — required to run the WhatsApp server
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Info "  Node.js is required for WhatsApp. Installing via winget..."
+    try {
+      winget install OpenJS.NodeJS --silent --accept-package-agreements --accept-source-agreements
+      # Refresh PATH so node is available in this session
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                  [System.Environment]::GetEnvironmentVariable("Path","User")
+    } catch {
+      Warn "  Could not install Node.js automatically."
+      Info "  Install it manually from: https://nodejs.org"
+      return
+    }
+  }
+
+  # Install npm dependencies
+  Info "  Installing WhatsApp server dependencies..."
+  Push-Location $serverDir
+  npm install --silent
+  Pop-Location
+  Success "  Dependencies installed."
+
+  # Save phone number to notifications config
+  $phone = Read-Host "[Dexter] Your phone number for notifications (e.g. +5491112345678)"
+  $configFile = Join-Path $env:USERPROFILE ".dexter\notifications.json"
+  if ($phone -and (Test-Path $configFile)) {
+    $cfg = Get-Content $configFile | ConvertFrom-Json
+    $cfg.channel = "whatsapp"
+    if (-not $cfg.whatsapp) { $cfg | Add-Member -NotePropertyName whatsapp -NotePropertyValue @{} }
+    $cfg.whatsapp.api_url = "http://localhost:3000"
+    $cfg.whatsapp.phone = $phone
+    $cfg | ConvertTo-Json -Depth 5 | Set-Content $configFile
+    Success "  Notifications config updated → channel: whatsapp, phone: $phone"
+  }
+
+  # Register as a Windows Task Scheduler task so the server runs at login
+  # and stays alive without needing an open terminal.
+  Info "  Registering WhatsApp server as a background Task Scheduler task..."
+  $nodePath = (Get-Command node).Source
+  $serverJs = Join-Path $serverDir "server.js"
+  $action   = New-ScheduledTaskAction -Execute $nodePath -Argument "`"$serverJs`"" -WorkingDirectory $serverDir
+  $trigger  = New-ScheduledTaskTrigger -AtLogOn
+  $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
+                -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName "Dexter WhatsApp Server" -Action $action `
+    -Trigger $trigger -Settings $settings -Force | Out-Null
+  Start-ScheduledTask -TaskName "Dexter WhatsApp Server"
+  Success "  Task registered and started. Runs automatically at every login."
+  Info "  Manage: Task Scheduler → 'Dexter WhatsApp Server'"
+  Info "  Logs:   $env:USERPROFILE\.dexter\whatsapp-server.log"
+}
+
 # ─── WSL2 bridge ───────────────────────────────────────────────────────────────
 function Setup-WSL2Bridge {
   if (-not (Detect-WSL2)) { return }
@@ -326,7 +392,10 @@ Copy-Skills -SkillsDir $paths.SkillsDir
 Write-Host "`nStep 4: MCPs" -ForegroundColor Blue
 Configure-MCPs -Paths $paths -AgentName $detectedAgent
 
-Write-Host "`nStep 5: WSL2 Bridge" -ForegroundColor Blue
+Write-Host "`nStep 5: WhatsApp Server" -ForegroundColor Blue
+Setup-WhatsApp
+
+Write-Host "`nStep 6: WSL2 Bridge" -ForegroundColor Blue
 Setup-WSL2Bridge
 
 # Inform the user about Engram only if it's not already installed.

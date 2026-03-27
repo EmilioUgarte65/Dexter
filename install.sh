@@ -327,17 +327,10 @@ setup_whatsapp() {
     fi
   fi
 
-  # Ask if the user wants the WhatsApp server registered as a system service
-  # so it survives terminal closes and starts automatically on boot.
-  echo ""
-  echo -e "${BOLD}Keep WhatsApp server running after terminal closes?${RESET}"
-  echo -e "  Registers as a system service (systemd on Linux, launchd on macOS)."
-  read -rp "$(echo -e "${YELLOW}[Dexter]${RESET} Enable auto-start service? [y/N] ")" svc_answer
-  if [[ "${svc_answer,,}" == "y" ]]; then
-    bash "$server_dir/start.sh" --install-service --port 3000
-  else
-    info "  You can enable it later: bash $server_dir/start.sh --install-service"
-  fi
+  # Register as a system service automatically so the WhatsApp server
+  # survives terminal closes and starts on boot without user intervention.
+  info "  Registering WhatsApp server as a background service..."
+  bash "$server_dir/start.sh" --install-service --port 3000
 
   echo ""
   success "WhatsApp server ready!"
