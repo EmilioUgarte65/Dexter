@@ -319,18 +319,42 @@ async function handleUnknownSender(senderJid, incomingText) {
 // ─── LLM CLI subprocess ───────────────────────────────────────────────────────
 
 function detectLLMCli() {
-  // Priority: DEXTER_AGENT env → claude → opencode
+  // Priority: DEXTER_AGENT env → PATH lookup → IDE extension fallback
   // Uses 'where' on Windows and 'which' on Unix to locate the CLI binary.
   const env = process.env.DEXTER_AGENT
   if (env) return env
+
   const isWin = process.platform === 'win32'
   const finder = isWin ? 'where' : 'which'
+
+  // 1. Try global PATH first
   for (const cli of ['claude', 'opencode']) {
     try {
       const r = spawnSync(finder, [cli], { encoding: 'utf8', timeout: 3000 })
       if (r.status === 0 && r.stdout.trim()) return cli
     } catch (_) {}
   }
+
+  // 2. Fallback: search inside known IDE extension directories
+  // Covers cases where Claude Code is installed as a VS Code / fork extension
+  // but not as a global CLI (e.g. Antigravity, Cursor, VSCodium, VS Code).
+  if (isWin) {
+    const home = os.homedir()
+    const ideDirs = ['.antigravity', '.cursor', '.vscode', 'AppData\\Local\\Programs\\cursor']
+    const glob   = require('fs')
+    for (const dir of ideDirs) {
+      const extRoot = path.join(home, dir, 'extensions')
+      try {
+        const entries = glob.readdirSync(extRoot)
+        for (const entry of entries) {
+          if (!entry.startsWith('anthropic.claude-code')) continue
+          const bin = path.join(extRoot, entry, 'resources', 'native-binary', 'claude.exe')
+          if (glob.existsSync(bin)) return bin
+        }
+      } catch (_) {}
+    }
+  }
+
   return null
 }
 
