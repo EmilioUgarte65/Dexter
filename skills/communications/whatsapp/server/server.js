@@ -691,10 +691,13 @@ EJECUCIÓN vs CÓDIGO:
   3. Espera confirmación de ${ownerName}.
   4. Ejecuta exactamente lo planeado.
 
-ENVIAR IMÁGENES POR WHATSAPP:
-- Comando para enviar imagen al owner: python3 "${sendPy}" send-image ${ownerPhone} <ruta-o-url> [caption]
-- Si te piden un screenshot: capturá la pantalla con las herramientas del sistema (PowerShell en Windows, scrot o import en Linux/Mac), guardá el archivo en un path temporal, y luego envialo con send-image.
-- También podés enviar imágenes desde URL directamente.`
+ENVIAR IMÁGENES POR WHATSAPP — REGLA OBLIGATORIA:
+- Comando para enviar imagen: python3 "${sendPy}" send-image ${ownerPhone} <ruta-o-url> [caption]
+- Si te piden un screenshot o una imagen: ENVIÁ EL ARCHIVO. NO describas la imagen con texto. El flujo es:
+  1. Capturá o localizá el archivo de imagen
+  2. Ejecutá: python3 "${sendPy}" send-image ${ownerPhone} <ruta> [caption]
+  3. Respondé solo con una confirmación corta (ej: "Listo, enviada 📸")
+- NUNCA respondas describiendo el contenido de una imagen cuando te piden que la envíes.`
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
