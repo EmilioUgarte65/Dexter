@@ -865,6 +865,7 @@ async function connect() {
         const isOwner = msg.key.fromMe  // message sent by this device = owner
           || allowFrom.length === 0
           || allowFrom.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
+        console.log(`[Dexter] group — jid:${groupJid} sender:${senderPart} resolved:${resolvedPhone} isOwner:${isOwner} text:${groupText.substring(0,50)}`)
 
         // Owner commands in any group (no wake word needed)
         if (isOwner) {
