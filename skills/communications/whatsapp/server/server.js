@@ -982,6 +982,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
         if (sent?.key?.id) trackSentId(sent.key.id)
         logMessage({ direction: 'out', to: senderPhone, text: '[screenshot sent]', tier: 'allowed-llm' })
         console.log(`[Dexter] → ${senderPhone}: [screenshot sent]`)
+        if (!useEngram) appendHistory(senderJid, 'assistant', '[Te envié un screenshot de la pantalla 📸]')
       } catch (e) {
         console.error('[Dexter] Screenshot send error:', e.message)
       }
@@ -1003,6 +1004,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
         if (sent?.key?.id) trackSentId(sent.key.id)
         logMessage({ direction: 'out', to: senderPhone, text: '[webcam sent]', tier: 'allowed-llm' })
         console.log(`[Dexter] → ${senderPhone}: [webcam sent]`)
+        if (!useEngram) appendHistory(senderJid, 'assistant', '[Te envié una imagen de la cámara 📷]')
       } catch (e) { console.error('[Dexter] Webcam send error:', e.message) }
       return
     }
@@ -1021,6 +1023,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
         if (sent?.key?.id) trackSentId(sent.key.id)
         logMessage({ direction: 'out', to: senderPhone, text: `[image sent: ${imgPath}]`, tier: 'allowed-llm' })
         console.log(`[Dexter] → ${senderPhone}: [image sent] ${imgPath}`)
+        if (!useEngram) appendHistory(senderJid, 'assistant', `[Te envié la imagen: ${path.basename(imgPath)}]`)
       } catch (e) {
         console.error('[Dexter] Last-image send error:', e.message)
       }
