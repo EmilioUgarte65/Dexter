@@ -297,37 +297,37 @@ function Install-Dependencies {
   }
 
   # Engram — persistent cross-session memory (SQLite + FTS5 MCP server)
+  # Not available on winget — installed via Go (winget install GoLang.Go first if needed)
   if (-not (Get-Command engram -ErrorAction SilentlyContinue)) {
     Info "Installing Engram (persistent memory for Dexter — required for cross-session context)..."
     $installed = $false
-    try {
-      winget install engram --silent --accept-package-agreements --accept-source-agreements
-      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                  [System.Environment]::GetEnvironmentVariable("Path","User")
-      if (Get-Command engram -ErrorAction SilentlyContinue) {
-        Success "  Engram installed: $(engram --version 2>&1)"
-        $installed = $true
-      }
-    } catch {}
 
-    if (-not $installed) {
-      # Fallback: install via Go if available
-      if (Get-Command go -ErrorAction SilentlyContinue) {
-        Info "  winget failed — trying Go install..."
-        go install github.com/nicholasgasior/engram@latest
+    # Ensure Go is available — install via winget if missing
+    if (-not (Get-Command go -ErrorAction SilentlyContinue)) {
+      Info "  Go is required to install Engram. Installing Go via winget..."
+      try {
+        winget install GoLang.Go --silent --accept-package-agreements --accept-source-agreements
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                    [System.Environment]::GetEnvironmentVariable("Path","User") + ";" +
-                    "$env:USERPROFILE\go\bin"
-        if (Get-Command engram -ErrorAction SilentlyContinue) {
-          Success "  Engram installed via Go"
-          $installed = $true
-        }
+                    [System.Environment]::GetEnvironmentVariable("Path","User")
+      } catch {
+        Warn "  Could not install Go via winget."
+      }
+    }
+
+    if (Get-Command go -ErrorAction SilentlyContinue) {
+      go install github.com/Gentleman-Programming/engram/cmd/engram@latest 2>&1 | Out-Null
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                  [System.Environment]::GetEnvironmentVariable("Path","User") + ";" +
+                  "$env:USERPROFILE\go\bin"
+      if (Get-Command engram -ErrorAction SilentlyContinue) {
+        Success "  Engram installed via Go"
+        $installed = $true
       }
     }
 
     if (-not $installed) {
       Warn "  Could not install Engram automatically."
-      Warn "  Install manually: winget install engram  OR  go install github.com/nicholasgasior/engram@latest"
+      Warn "  Install manually: go install github.com/Gentleman-Programming/engram/cmd/engram@latest"
       Warn "  Without Engram, Dexter loses memory between sessions."
     }
   } else {

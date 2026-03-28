@@ -393,14 +393,14 @@ install_dependencies() {
 
     if [[ "$installed" == false ]] && command -v go &>/dev/null; then
       info "  brew not available — trying Go install..."
-      go install github.com/nicholasgasior/engram@latest && installed=true
+      go install github.com/Gentleman-Programming/engram/cmd/engram@latest && installed=true
     fi
 
     if [[ "$installed" == true ]]; then
       success "  Engram installed: $(engram --version 2>&1)"
     else
       warn "  Could not install Engram automatically."
-      warn "  Install manually: brew install engram  OR  go install github.com/nicholasgasior/engram@latest"
+      warn "  Install manually: brew install engram  OR  go install github.com/Gentleman-Programming/engram/cmd/engram@latest"
       warn "  Without Engram, Dexter loses memory between sessions."
     fi
   else

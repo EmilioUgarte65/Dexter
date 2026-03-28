@@ -4,7 +4,7 @@
   "description": "Engram persistent memory MCP server — SQLite + FTS5, cross-session memory for Dexter",
   "install": {
     "brew": "engram",
-    "go": "github.com/nicholasgasior/engram@latest",
+    "go": "github.com/Gentleman-Programming/engram/cmd/engram@latest",
     "docs": "https://engram.sh"
   }
 }
