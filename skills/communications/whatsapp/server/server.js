@@ -939,13 +939,18 @@ async function connect() {
 
       console.log(`[Dexter] msg — jid:${senderJid} resolved:${resolvedPhone} allowed:${isAllowed}`)
 
+      // @lid JIDs can't receive messages — resolve to @s.whatsapp.net for replies
+      const replyJid = senderJid.includes('@lid')
+        ? resolvedPhone.replace(/^\+/, '') + '@s.whatsapp.net'
+        : senderJid
+
       if (isAllowed) {
-        await handleAllowedSender(senderJid, text, hasImage ? msg : null)
+        await handleAllowedSender(replyJid, text, hasImage ? msg : null)
       } else {
         // Strangers: only respond if they explicitly mention the wake word (default: "dexter")
         const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
         if (wakeWord && !new RegExp(wakeWord, 'i').test(text)) continue
-        await handleUnknownSender(senderJid, text)
+        await handleUnknownSender(replyJid, text)
       }
     }
   })
