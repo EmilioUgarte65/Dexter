@@ -7,7 +7,7 @@
  *   - Unknown numbers     → restricted persona responder (AI replies as you)
  *
  * Pairing: phone number pairing (no QR needed — works headless)
- *   WA_PHONE=+528337587196 node server.js
+ *   WA_PHONE=+521XXXXXXXXXX node server.js
  *   Or set "allowFrom": ["+52..."] in ~/.dexter/whatsapp-persona.json
  *
  * Persona config: ~/.dexter/whatsapp-persona.json
@@ -19,7 +19,7 @@
  *   GET  /status
  *
  * Usage:
- *   WA_PHONE=+528337587196 node server.js    # port 3000
+ *   WA_PHONE=+521XXXXXXXXXX node server.js    # port 3000
  *   WA_PORT=3001 node server.js
  */
 

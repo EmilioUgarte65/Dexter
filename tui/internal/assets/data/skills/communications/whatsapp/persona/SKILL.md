@@ -51,8 +51,8 @@ When the user asks to configure their WhatsApp persona or how the bot should res
 
 ```json
 {
-  "name": "Emilio",
-  "about": "Soy desarrollador freelance, me especializo en apps mobile y web.",
+  "name": "Your Name",
+  "about": "Freelance developer, specialized in mobile and web apps.",
   "language": "es",
   "tone": "casual y amigable",
   "availability": "Lunes a viernes de 9 a 18hs",
