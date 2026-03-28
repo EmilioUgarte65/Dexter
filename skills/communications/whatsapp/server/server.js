@@ -971,7 +971,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
 
   // ── Native shortcuts: handle image requests without Claude ──────────────────
   // Screenshot request
-  if (/screenshot|captura\s*de\s*pantalla|foto\s*de\s*(la\s*)?pantalla|manda(me|r).*pantalla|pantalla.*manda/i.test(incomingText)) {
+  if (/screenshot|(captura|foto|imagen|toma|muestra|env[ií]|manda)\s*(me\s*)?(de\s*)?(la\s*)?pantalla|pantalla.*(captura|foto|imagen|muestra|env[ií]|manda)/i.test(incomingText)) {
     console.log(`[Dexter] Screenshot shortcut triggered`)
     const ssPath = await takeScreenshot()
     if (ssPath) {
@@ -993,7 +993,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
   }
 
   // Webcam capture
-  if (/c[aá]mara|webcam|c[aá]mera|what.*cam|cam.*shot/i.test(incomingText)) {
+  if (/(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda|captura|toma\s+una?|saca\s+una?|foto\s+de\s+la|imagen\s+de\s+la)\s*(la\s+)?(c[aá]mara|webcam)|(c[aá]mara|webcam).*(foto|imagen|captura|muestra|env[ií]a|manda|toma)/i.test(incomingText)) {
     console.log(`[Dexter] Webcam shortcut triggered`)
     const camPath = await captureWebcam()
     if (camPath) {
