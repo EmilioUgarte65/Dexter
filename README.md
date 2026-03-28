@@ -11,8 +11,8 @@
 [![Tests](https://img.shields.io/badge/tests-99%20passing-brightgreen.svg)](#testing)
 [![Status](https://img.shields.io/badge/status-beta%20%E2%80%94%20active%20development-yellow.svg)](#)
 
-> **🚧 En desarrollo activo — beta pública**
-> Dexter está siendo depurado y mejorado continuamente. Si encontrás algún bug o comportamiento inesperado, abrí un [issue](https://github.com/EmilioUgarte65/Dexter/issues) — cualquier reporte es bienvenido y muy apreciado. 🙏
+> **🚧 Active development — public beta**
+> Dexter is continuously being refined and improved. If you find a bug or unexpected behavior, please open an [issue](https://github.com/EmilioUgarte65/Dexter/issues) — any report is welcome and greatly appreciated. 🙏
 
 ---
 

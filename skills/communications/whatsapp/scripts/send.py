@@ -161,16 +161,14 @@ def cmd_send_media(phone: str, file_path: str, caption: Optional[str] = None):
 
 
 def cmd_status():
-    result = api_get(f"/api/session/{SESSION}/status")
-    status = result.get("status", result.get("state", "unknown"))
-    connected = status in ("CONNECTED", "connected", "open", "OPEN")
-    color = GREEN if connected else RED
-    print(f"Session: {SESSION}")
+    # Server exposes GET /status → { "ok": bool, "ready": bool, "persona": str|null }
+    result = api_get("/status")
+    ready = result.get("ready", False)
+    color = GREEN if ready else RED
+    status = "connected" if ready else "disconnected"
     print(f"Status:  {color}{status}{RESET}")
-    if result.get("pushname"):
-        print(f"Name:    {result['pushname']}")
-    if result.get("wid"):
-        print(f"Phone:   {result['wid'].get('user', 'unknown')}")
+    if result.get("persona"):
+        print(f"Persona: {result['persona']}")
 
 
 # ─── Entry point ──────────────────────────────────────────────────────────────

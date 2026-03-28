@@ -38,6 +38,9 @@ const CONFIG_PATH = path.join(os.homedir(), '.dexter', 'notifications.json')
 const PERSONA_PATH = path.join(os.homedir(), '.dexter', 'whatsapp-persona.json')
 const LOG_PATH    = path.join(os.homedir(), '.dexter', 'whatsapp-messages.jsonl')
 const PORT = parseInt(process.env.WA_PORT || '3000', 10)
+// Dexter root: 4 levels up from server.js (skills/communications/whatsapp/server/).
+// Override with DEXTER_ROOT env var if the install layout differs.
+const DEXTER_ROOT = process.env.DEXTER_ROOT || path.resolve(__dirname, '../../../..')
 
 let sock = null
 let isReady = false
@@ -46,6 +49,12 @@ let pairingRequested = false
 let waitingForPairing = false
 const lidToPhone   = new Map()  // LID (raw) → "+phone" — populated from contacts.upsert
 const sentMsgIds   = new Set()  // IDs of messages Dexter sent — skip on echo to prevent loops
+
+// Track a sent message ID with TTL — prevents memory leak if WhatsApp never echoes the message back.
+function trackSentId(id) {
+  sentMsgIds.add(id)
+  setTimeout(() => sentMsgIds.delete(id), 120000)
+}
 const processedIds = new Set()  // IDs of messages already processed — deduplicates LID vs phone JID duplicates
 
 // Per-chat conversation history — keeps the last N turns so Claude has context.
@@ -53,10 +62,11 @@ const processedIds = new Set()  // IDs of messages already processed — dedupli
 const chatHistory  = new Map()
 const HISTORY_LIMIT = 20  // max turns to keep per chat
 
-function waitForEnter(prompt) {
+function waitForEnter(prompt, timeoutMs = 300000) {
   return new Promise(resolve => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-    rl.question(prompt, () => { rl.close(); resolve() })
+    const timer = setTimeout(() => { rl.close(); resolve() }, timeoutMs)
+    rl.question(prompt, () => { clearTimeout(timer); rl.close(); resolve() })
   })
 }
 
@@ -70,13 +80,23 @@ function loadConfig() {
   try { return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) } catch (_) { return {} }
 }
 
+let _personaCache = undefined
+let _personaCacheTime = 0
+const PERSONA_CACHE_TTL = 5000  // ms — short enough to pick up saves, long enough to batch reads
+
 function loadPersona() {
-  try { return JSON.parse(fs.readFileSync(PERSONA_PATH, 'utf8')) } catch (_) { return null }
+  const now = Date.now()
+  if (_personaCache !== undefined && now - _personaCacheTime < PERSONA_CACHE_TTL) return _personaCache
+  try { _personaCache = JSON.parse(fs.readFileSync(PERSONA_PATH, 'utf8')) } catch (_) { _personaCache = null }
+  _personaCacheTime = now
+  return _personaCache
 }
 
 function savePersona(persona) {
   fs.mkdirSync(path.dirname(PERSONA_PATH), { recursive: true })
   fs.writeFileSync(PERSONA_PATH, JSON.stringify(persona, null, 2))
+  _personaCache = persona          // update cache immediately on write
+  _personaCacheTime = Date.now()
 }
 
 // ─── Phone number resolution ──────────────────────────────────────────────────
@@ -104,7 +124,9 @@ function toJid(phone) {
 }
 
 function fromJid(jid) {
-  return '+' + jid.replace(/@s\.whatsapp\.net$/, '').replace(/@c\.us$/, '').replace(/@lid$/, '')
+  return '+' + jid
+    .replace(/@s\.whatsapp\.net$/, '').replace(/@c\.us$/, '').replace(/@lid$/, '')
+    .replace(/:.*/, '')  // strip :device suffix (e.g. 521234567890:5@s.whatsapp.net → +521234567890)
 }
 
 // ─── LLM call (stdlib https only) ────────────────────────────────────────────
@@ -267,7 +289,7 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
       const response = await runLLMCliWithImage(cli, imagePrompt, imagePath)
       if (response) {
         const sent = await sock.sendMessage(groupJid, { text: response })
-        if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+        if (sent?.key?.id) trackSentId(sent.key.id)
         logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
       }
       return
@@ -280,7 +302,11 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
   if (useEngram) {
     const engramPrompt = buildEngramSystemPrompt(groupJid, true)
     const combinedSystemPrompt = `${systemPrompt}\n\n${engramPrompt}`
-    extraArgs = ['--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
+    // Owner gets full tool access (Engram + machine). Non-owners are restricted even with Engram —
+    // they only need mem_* tools, not Read/Write/Bash on the host machine.
+    extraArgs = isOwner
+      ? ['--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
+      : ['--system-prompt', combinedSystemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   } else {
     extraArgs = ['--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   }
@@ -297,7 +323,7 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         const sent = await sock.sendMessage(groupJid, { text: response })
-        if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+        if (sent?.key?.id) trackSentId(sent.key.id)
         logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
         break
       } catch (e) {
@@ -309,7 +335,7 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
     console.warn('[Dexter] LLM returned empty response for group — sending fallback')
     try {
       const sent = await sock.sendMessage(groupJid, { text: 'No pude procesar eso. Intenta de nuevo.' })
-      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+      if (sent?.key?.id) trackSentId(sent.key.id)
     } catch (_) {}
   }
 }
@@ -325,7 +351,7 @@ async function handleUnknownSender(senderJid, incomingText) {
   if (!persona) {
     const fallback = 'Hola, en este momento no puedo responder. Te escribo a la brevedad 👋'
     const sent = await sock.sendMessage(senderJid, { text: fallback })
-    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+    if (sent?.key?.id) trackSentId(sent.key.id)
     logMessage({ direction: 'out', to: senderPhone, text: fallback, tier: 'fallback' })
     return
   }
@@ -333,7 +359,7 @@ async function handleUnknownSender(senderJid, incomingText) {
   // Fixed reply — no LLM needed
   if (persona.stranger_reply) {
     const sent = await sock.sendMessage(senderJid, { text: persona.stranger_reply })
-    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+    if (sent?.key?.id) trackSentId(sent.key.id)
     logMessage({ direction: 'out', to: senderPhone, text: persona.stranger_reply, tier: 'persona-fixed' })
     return
   }
@@ -341,11 +367,13 @@ async function handleUnknownSender(senderJid, incomingText) {
   try {
     const reply = await callLLM(persona, senderPhone, incomingText)
     if (reply) {
-      await sock.sendMessage(senderJid, { text: reply })
+      const sent = await sock.sendMessage(senderJid, { text: reply })
+      if (sent?.key?.id) trackSentId(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: reply, tier: 'persona' })
     } else {
       const fallback = persona.fallback_message || 'Hola! En este momento no puedo responder, te escribo pronto 👋'
-      await sock.sendMessage(senderJid, { text: fallback })
+      const sent = await sock.sendMessage(senderJid, { text: fallback })
+      if (sent?.key?.id) trackSentId(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: fallback, tier: 'fallback' })
     }
   } catch (e) {
@@ -355,7 +383,15 @@ async function handleUnknownSender(senderJid, incomingText) {
 
 // ─── LLM CLI subprocess ───────────────────────────────────────────────────────
 
+let _cachedCli = undefined  // undefined = not yet probed; null = not found; string = path
+
 function detectLLMCli() {
+  if (_cachedCli !== undefined) return _cachedCli
+  _cachedCli = _detectLLMCliUncached()
+  return _cachedCli
+}
+
+function _detectLLMCliUncached() {
   // Priority: DEXTER_AGENT env → PATH lookup → IDE extension fallback
   // Uses 'where' on Windows and 'which' on Unix to locate the CLI binary.
   const env = process.env.DEXTER_AGENT
@@ -524,7 +560,7 @@ function spawnClaude({ cli, prompt, extraArgs = [], cwd, env, timeoutMs = 120000
 }
 
 function runLLMCliWithImage(cli, prompt, imagePath) {
-  const dexterRoot = path.resolve(__dirname, '../../../..')
+  const dexterRoot = DEXTER_ROOT
   return spawnClaude({
     cli, prompt,
     extraArgs: ['--image', imagePath, '--dangerously-skip-permissions'],
@@ -534,7 +570,7 @@ function runLLMCliWithImage(cli, prompt, imagePath) {
 }
 
 function runLLMCli(cli, message) {
-  const dexterRoot = path.resolve(__dirname, '../../../..')
+  const dexterRoot = DEXTER_ROOT
   return spawnClaude({
     cli, prompt: message,
     extraArgs: ['--dangerously-skip-permissions'],
@@ -545,11 +581,14 @@ function runLLMCli(cli, message) {
 
 // ─── Engram availability check ────────────────────────────────────────────────
 
+let _engramAvailable = undefined  // cached on first call — binary won't appear/disappear at runtime
+
 function engramAvailable() {
-  // Engram is available if the binary exists in PATH
+  if (_engramAvailable !== undefined) return _engramAvailable
   const isWin = process.platform === 'win32'
   const r = spawnSync(isWin ? 'where' : 'which', ['engram'], { encoding: 'utf8', timeout: 3000 })
-  return r.status === 0 && !!r.stdout.trim()
+  _engramAvailable = r.status === 0 && !!r.stdout.trim()
+  return _engramAvailable
 }
 
 // Builds a system prompt that instructs Claude to use Engram memory and the
@@ -615,7 +654,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
     console.log(`[Dexter] RAM history mode (Engram not found) for ${senderPhone}`)
   }
 
-  const dexterRoot = path.resolve(__dirname, '../../../..')
+  const dexterRoot = DEXTER_ROOT
 
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
@@ -627,7 +666,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
         const response = await runLLMCliWithImage(cli, imagePrompt, imagePath)
         if (response) {
           const sent = await sock.sendMessage(senderJid, { text: response })
-          if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+          if (sent?.key?.id) trackSentId(sent.key.id)
           logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
           console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
         } else {
@@ -645,14 +684,14 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
     if (response) {
       if (!useEngram) appendHistory(senderJid, 'assistant', response)
       const sent = await sock.sendMessage(senderJid, { text: response })
-      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+      if (sent?.key?.id) trackSentId(sent.key.id)
       logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
       console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
     } else {
       console.warn('[Dexter] LLM returned empty response — sending fallback')
       const fallback = 'No pude procesar eso. Intenta de nuevo.'
       const sent = await sock.sendMessage(senderJid, { text: fallback })
-      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+      if (sent?.key?.id) trackSentId(sent.key.id)
     }
   } catch (e) {
     console.error('[Dexter] handleAllowedSender error:', e.message)
@@ -712,7 +751,13 @@ function startHttpServer() {
 async function connect() {
   fs.mkdirSync(AUTH_DIR, { recursive: true })
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
-  const { version } = await fetchLatestBaileysVersion()
+  let version
+  try {
+    ;({ version } = await fetchLatestBaileysVersion())
+  } catch (_) {
+    version = [2, 3000, 1023456789]  // known-good fallback — avoids crash on flaky network
+    console.warn('[Dexter] fetchLatestBaileysVersion failed — using fallback version')
+  }
 
   sock = makeWASocket({
     version,
@@ -911,7 +956,7 @@ async function connect() {
         if (eresMatch) {
           setGroupPersonality(groupJid, eresMatch[1].trim())
           const sent = await sock.sendMessage(groupJid, { text: '✅ Personalidad actualizada.' })
-          if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+          if (sent?.key?.id) trackSentId(sent.key.id)
           continue
         }
 
