@@ -309,23 +309,31 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
   }
 
   const useEngram = engramAvailable()
-  let extraArgs
+  let prompt, extraArgs
 
   if (useEngram) {
     const engramPrompt = buildEngramSystemPrompt(groupJid, true)
     const combinedSystemPrompt = `${systemPrompt}\n\n${engramPrompt}`
+    prompt = text
     // Owner gets full tool access (Engram + machine). Non-owners are restricted even with Engram —
     // they only need mem_* tools, not Read/Write/Bash on the host machine.
     extraArgs = isOwner
       ? ['--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
       : ['--system-prompt', combinedSystemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   } else {
-    extraArgs = ['--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
+    // Build prompt with conversation history so Claude has context across messages.
+    // Owner gets full tool access; non-owners are restricted to read-only responses.
+    const history = chatHistory.get(groupJid) || []
+    prompt = buildPromptWithHistory(history, text)
+    appendHistory(groupJid, 'user', text)
+    extraArgs = isOwner
+      ? ['--system-prompt', systemPrompt, '--dangerously-skip-permissions']
+      : ['--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   }
 
   // Group chats run from home — avoids loading Dexter's CLAUDE.md (English boilerplate)
   const response = await spawnClaude({
-    cli, prompt: text, extraArgs,
+    cli, prompt, extraArgs,
     cwd: os.homedir(),
     timeoutMs: 60000,
   })
