@@ -960,6 +960,26 @@ async function connect() {
 
 const USE_QR = process.argv.includes('--qr') || process.env.WA_QR === '1'
 
+// Prevent libsignal SessionErrors from crashing the process — these happen
+// when decrypting old messages from history sync with missing session keys.
+process.on('uncaughtException', (err) => {
+  if (err.name === 'SessionError' || err.message?.includes('No sessions') || err.message?.includes('Bad MAC')) {
+    console.warn('[Dexter] Ignored session decrypt error (old message):', err.message)
+    return
+  }
+  console.error('[Dexter] Uncaught exception:', err)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason?.message || String(reason)
+  if (msg.includes('No sessions') || msg.includes('Bad MAC') || msg.includes('SessionError')) {
+    console.warn('[Dexter] Ignored session rejection (old message):', msg)
+    return
+  }
+  console.error('[Dexter] Unhandled rejection:', reason)
+})
+
 console.log('[Dexter] Starting WhatsApp server...')
 const myPhone = getMyPhone()
 if (myPhone) console.log(`[Dexter] Phone: ${myPhone}`)
