@@ -722,6 +722,66 @@ ENVIAR IMÁGENES POR WHATSAPP — REGLA OBLIGATORIA:
 - NUNCA describas el contenido de una imagen cuando te piden que la envíes — usá el token.`
 }
 
+// ─── Native image helpers ─────────────────────────────────────────────────────
+
+// Takes a screenshot using the OS native tools. Returns the saved file path or null.
+async function takeScreenshot() {
+  const outPath = path.join(os.tmpdir(), `dexter-ss-${Date.now()}.png`)
+  try {
+    if (process.platform === 'win32') {
+      const script = [
+        'Add-Type -AssemblyName System.Windows.Forms,System.Drawing',
+        '$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds',
+        '$b=New-Object System.Drawing.Bitmap($s.Width,$s.Height)',
+        '$g=[System.Drawing.Graphics]::FromImage($b)',
+        '$g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size)',
+        `$b.Save('${outPath.replace(/\\/g, '\\\\').replace(/'/g, "''")}')`,
+        '$g.Dispose(); $b.Dispose()',
+      ].join('; ')
+      const scriptFile = path.join(os.tmpdir(), `dexter-ss-${Date.now()}.ps1`)
+      fs.writeFileSync(scriptFile, script, 'utf8')
+      await new Promise((resolve, reject) => {
+        const child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-File', scriptFile], {
+          windowsHide: true, stdio: 'ignore',
+        })
+        child.on('close', code => {
+          try { fs.unlinkSync(scriptFile) } catch (_) {}
+          code === 0 ? resolve() : reject(new Error(`PowerShell exited ${code}`))
+        })
+      })
+    } else {
+      await new Promise((resolve, reject) => {
+        const child = spawn('scrot', [outPath], { stdio: 'ignore' })
+        child.on('close', code => code === 0 ? resolve() : reject(new Error(`scrot exited ${code}`)))
+        child.on('error', () => {
+          // fallback: import (ImageMagick)
+          const fb = spawn('import', ['-window', 'root', outPath], { stdio: 'ignore' })
+          fb.on('close', c2 => c2 === 0 ? resolve() : reject(new Error('No screenshot tool found')))
+        })
+      })
+    }
+    return fs.existsSync(outPath) ? outPath : null
+  } catch (e) {
+    console.error('[Dexter] takeScreenshot error:', e.message)
+    return null
+  }
+}
+
+// Returns the most recently modified image file in ~/Downloads, or null.
+function findLastImageInDir(dir) {
+  const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.avif'])
+  try {
+    if (!fs.existsSync(dir)) return null
+    const files = fs.readdirSync(dir)
+      .filter(f => IMAGE_EXTS.has(path.extname(f).toLowerCase()))
+      .map(f => ({ f, mtime: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+    return files.length > 0 ? path.join(dir, files[0].f) : null
+  } catch (e) {
+    return null
+  }
+}
+
 // ─── Image token parser ───────────────────────────────────────────────────────
 // Claude signals image sending with [SEND_IMAGE:/path] or [SEND_IMAGE:/path|caption].
 // Returns { images: [{path, caption}], text: string } — text has tokens stripped.
@@ -770,6 +830,49 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
   }
 
   const dexterRoot = DEXTER_ROOT
+
+  // ── Native shortcuts: handle image requests without Claude ──────────────────
+  // Screenshot request
+  if (/screenshot|captura\s*de\s*pantalla|foto\s*de\s*(la\s*)?pantalla|manda(me|r).*pantalla|pantalla.*manda/i.test(incomingText)) {
+    console.log(`[Dexter] Screenshot shortcut triggered`)
+    const ssPath = await takeScreenshot()
+    if (ssPath) {
+      try {
+        const buffer = fs.readFileSync(ssPath)
+        try { fs.unlinkSync(ssPath) } catch (_) {}
+        const sent = await sock.sendMessage(senderJid, { image: buffer, caption: 'Screenshot 📸' })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+        logMessage({ direction: 'out', to: senderPhone, text: '[screenshot sent]', tier: 'allowed-llm' })
+        console.log(`[Dexter] → ${senderPhone}: [screenshot sent]`)
+      } catch (e) {
+        console.error('[Dexter] Screenshot send error:', e.message)
+      }
+      return
+    }
+    // If screenshot fails, fall through to Claude
+    console.warn('[Dexter] Screenshot capture failed — falling through to Claude')
+  }
+
+  // Last image in Downloads
+  if (/última\s*imagen|ultimo\s*imagen|last\s*image|(imagen|foto).*(descarga|download)|(descarga|download).*(imagen|foto)/i.test(incomingText)) {
+    console.log(`[Dexter] Last-image-in-downloads shortcut triggered`)
+    const downloadsDir = path.join(os.homedir(), 'Downloads')
+    const imgPath = findLastImageInDir(downloadsDir)
+    if (imgPath) {
+      try {
+        const buffer = fs.readFileSync(imgPath)
+        const sent = await sock.sendMessage(senderJid, { image: buffer, caption: path.basename(imgPath) })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+        logMessage({ direction: 'out', to: senderPhone, text: `[image sent: ${imgPath}]`, tier: 'allowed-llm' })
+        console.log(`[Dexter] → ${senderPhone}: [image sent] ${imgPath}`)
+      } catch (e) {
+        console.error('[Dexter] Last-image send error:', e.message)
+      }
+      return
+    }
+    console.warn('[Dexter] No images found in Downloads — falling through to Claude')
+  }
+  // ────────────────────────────────────────────────────────────────────────────
 
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
