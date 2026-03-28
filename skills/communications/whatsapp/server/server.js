@@ -36,6 +36,14 @@ const path = require('path')
 const readline = require('readline')
 const { spawn, spawnSync } = require('child_process')
 
+// Prevent Windows spawn errors (AssignProcessToJobObject etc.) from killing the process
+process.on('uncaughtException', (err) => {
+  console.error('[Dexter] Uncaught exception (continuing):', err.message)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[Dexter] Unhandled rejection (continuing):', reason?.message || reason)
+})
+
 const AUTH_DIR    = path.join(os.homedir(), '.dexter', 'whatsapp')
 const CONFIG_PATH = path.join(os.homedir(), '.dexter', 'notifications.json')
 const PERSONA_PATH = path.join(os.homedir(), '.dexter', 'whatsapp-persona.json')
@@ -645,6 +653,7 @@ async function transcribeAudio(filePath) {
   if (!py) { console.warn('[Dexter] Python not found — cannot transcribe audio'); return null }
   return new Promise((resolve) => {
     const outDir = os.tmpdir()
+    // shell:true avoids AssignProcessToJobObject error 87 on Windows/PM2
     const child = spawn(py, [
       '-m', 'whisper', filePath,
       '--model', 'base',
@@ -652,7 +661,7 @@ async function transcribeAudio(filePath) {
       '--output_dir', outDir,
       '--device', 'cpu',
       '--fp16', 'False',
-    ], { stdio: ['ignore', 'pipe', 'pipe'] })
+    ], { stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' })
     let stderr = ''
     child.stderr.on('data', d => { stderr += d.toString() })
     child.on('close', code => {
