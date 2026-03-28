@@ -304,6 +304,7 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd,
       env: spawnEnv,
+      shell: process.platform === 'win32',
     })
     const timer = setTimeout(() => { child.kill('SIGTERM'); resolve(null) }, 60000)
     child.stdout.on('data', d => { stdout += d.toString() })
@@ -312,7 +313,7 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
       clearTimeout(timer)
       resolve(code === 0 && stdout.trim() ? stdout.trim() : null)
     })
-    child.on('error', () => { clearTimeout(timer); resolve(null) })
+    child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] handleGroupChat spawn error:', err.message); resolve(null) })
   })
 
   if (response) {
