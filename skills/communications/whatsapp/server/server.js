@@ -652,7 +652,7 @@ async function transcribeAudio(filePath) {
       '--output_dir', outDir,
       '--device', 'cpu',
       '--fp16', 'False',
-    ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    ], { stdio: ['ignore', 'pipe', 'pipe'] })
     let stderr = ''
     child.stderr.on('data', d => { stderr += d.toString() })
     child.on('close', code => {
