@@ -999,10 +999,15 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
 
   // Webcam capture — also triggers on "webcam" alone or "mándamelo/enviamelo" when history mentions camera
   const recentHistory = (chatHistory.get(senderJid) || []).slice(-3).map(h => h.text).join(' ')
+  const hasCameraHistory = /c[aá]mara|webcam/i.test(recentHistory)
   const followUpSend  = /^(env[ií]a?me(lo)?|manda?me(lo)?|manda(lo)?|env[ií]a(lo)?|s[ií]|ok|dale|listo|mand[áa](me)?lo)[\s!.]*$/i.test(incomingText.trim())
-    && /c[aá]mara|webcam/i.test(recentHistory)
-  if (/^webcam$/i.test(incomingText.trim()) || followUpSend
-    || /(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda|captura|toma\s+una?|saca\s+una?|foto\s+de\s+la|imagen\s+de\s+la)\s*(la\s+)?(c[aá]mara|webcam)|(c[aá]mara|webcam).*(foto|imagen|captura|muestra|env[ií]a|manda|toma)/i.test(incomingText)) {
+    && hasCameraHistory
+  // Also catch "muéstrame la imagen" / "mándame la imagen" when camera was mentioned recently
+  const followUpShowImage = /(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|manda|env[ií]a).*(imagen|foto|captura)/i.test(incomingText)
+    && hasCameraHistory
+  if (/^webcam$/i.test(incomingText.trim()) || followUpSend || followUpShowImage
+    // send verbs + camera (words allowed between verb and camera)
+    || /(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda|captura|toma\s+una?|saca\s+una?|foto\s+de\s+la|imagen\s+de\s+la).{0,40}(c[aá]mara|webcam)|(c[aá]mara|webcam).*(foto|imagen|captura|muestra|env[ií]a|manda|toma)/i.test(incomingText)) {
     console.log(`[Dexter] Webcam shortcut triggered`)
     const camPath = await captureWebcam()
     if (camPath) {
@@ -1021,7 +1026,9 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
   }
 
   // Webcam describe — capture frame and pass to Claude vision so it can actually analyze it
-  if (/(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|qu[eé]\s+se\s+ve|analiza|mira|observa).*(c[aá]mara|webcam)|(c[aá]mara|webcam).*(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|analiza)/i.test(incomingText)) {
+  // Skip describe if message also has a send verb (user wants the image, not text)
+  const hasSendVerb = /(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda)/i.test(incomingText)
+  if (!hasSendVerb && /(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|qu[eé]\s+se\s+ve|analiza|mira|observa).*(c[aá]mara|webcam)|(c[aá]mara|webcam).*(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|analiza)/i.test(incomingText)) {
     console.log(`[Dexter] Webcam-describe shortcut triggered`)
     const camPath = await captureWebcam()
     if (camPath && cli) {
