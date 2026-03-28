@@ -572,6 +572,18 @@ function fetchUrlBuffer(url) {
   })
 }
 
+// Returns 'python3' or 'python' depending on what's available on PATH, or null.
+function detectPython() {
+  const { spawnSync } = require('child_process')
+  for (const cmd of ['python3', 'python']) {
+    try {
+      const r = spawnSync(cmd, ['--version'], { encoding: 'utf8', windowsHide: true })
+      if (r.status === 0) return cmd
+    } catch (_) {}
+  }
+  return null
+}
+
 // Downloads a WhatsApp image message to a temp file and returns the path.
 // Returns null if download fails.
 async function downloadImage(msg) {
@@ -586,6 +598,53 @@ async function downloadImage(msg) {
     console.error('[Dexter] Image download error:', e.message)
     return null
   }
+}
+
+// Downloads a WhatsApp audio/PTT message to a temp .ogg file. Returns path or null.
+async function downloadAudio(msg) {
+  try {
+    const { downloadMediaMessage } = require('@whiskeysockets/baileys')
+    const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: { info: () => {}, error: () => {} } })
+    const file = path.join(os.tmpdir(), `dexter-audio-${Date.now()}.ogg`)
+    fs.writeFileSync(file, buffer)
+    return file
+  } catch (e) {
+    console.error('[Dexter] Audio download error:', e.message)
+    return null
+  }
+}
+
+// Transcribes an audio file using local Whisper. Returns the transcript string or null.
+async function transcribeAudio(filePath) {
+  const py = detectPython()
+  if (!py) { console.warn('[Dexter] Python not found — cannot transcribe audio'); return null }
+  return new Promise((resolve) => {
+    const outDir = os.tmpdir()
+    const child = spawn(py, [
+      '-m', 'whisper', filePath,
+      '--model', 'base',
+      '--output_format', 'txt',
+      '--output_dir', outDir,
+      '--device', 'cpu',
+      '--fp16', 'False',
+    ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stderr = ''
+    child.stderr.on('data', d => { stderr += d.toString() })
+    child.on('close', code => {
+      if (code !== 0) {
+        console.error('[Dexter] Whisper error:', stderr.slice(-300))
+        return resolve(null)
+      }
+      const base    = path.basename(filePath, path.extname(filePath))
+      const txtPath = path.join(outDir, `${base}.txt`)
+      try {
+        const text = fs.readFileSync(txtPath, 'utf8').trim()
+        try { fs.unlinkSync(txtPath) } catch (_) {}
+        resolve(text || null)
+      } catch (e) { resolve(null) }
+    })
+    child.on('error', e => { console.error('[Dexter] Whisper spawn error:', e.message); resolve(null) })
+  })
 }
 
 // ─── Core spawn helper ────────────────────────────────────────────────────────
@@ -1209,7 +1268,8 @@ async function connect() {
       // IMPORTANT: only track messages that have content. Bad MAC / undecrypted messages arrive
       // with the same ID but no text — adding them here would block the later decrypted retry.
       const msgHasContent = !!(msg.message?.conversation || msg.message?.extendedTextMessage?.text
-        || msg.message?.imageMessage || msg.message?.imageMessage?.caption)
+        || msg.message?.imageMessage || msg.message?.imageMessage?.caption
+        || msg.message?.audioMessage || msg.message?.pttMessage)
       if (msg.key.id && processedIds.has(msg.key.id)) continue
       if (msg.key.id && msgHasContent) { processedIds.add(msg.key.id); setTimeout(() => processedIds.delete(msg.key.id), 60000) }
 
@@ -1225,7 +1285,34 @@ async function connect() {
         const groupJid   = msg.key.remoteJid
         const groupText  = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || ''
         const groupImage = msg.message?.imageMessage ? msg : null
-        if (!groupText.trim() && !groupImage) continue
+        const groupAudio = !!(msg.message?.audioMessage || msg.message?.pttMessage)
+        if (!groupText.trim() && !groupImage && !groupAudio) continue
+
+        // Transcribe audio in group (owner only — avoid running Whisper for every stranger's voice note)
+        let groupIncomingText = groupText
+        if (!groupIncomingText.trim() && groupAudio) {
+          // Determine isOwner early for audio (need persona + allowFrom)
+          const _p = loadPersona() || {}
+          const _af = (_p.allowFrom || []).map(n => n.replace(/\s/g, ''))
+          const _sp = (msg.key.participant || '').replace(/@.*/, '').replace(/:.*/, '')
+          const _rp = (msg.key.participant || '').includes('@lid')
+            ? (lidToPhone.get(_sp) || fromJid(msg.key.participant || ''))
+            : fromJid(msg.key.participant || '')
+          const _s10 = (n) => n.replace(/^\+/, '').slice(-10)
+          const _isOwnerAudio = msg.key.fromMe
+            || _af.length === 0
+            || _af.some(n => _rp === n || _s10(_rp) === _s10(n))
+          if (_isOwnerAudio) {
+            console.log(`[Dexter] Group audio from owner — transcribing...`)
+            const ap = await downloadAudio(msg)
+            if (ap) {
+              const tr = await transcribeAudio(ap)
+              try { fs.unlinkSync(ap) } catch (_) {}
+              if (tr) { groupIncomingText = tr; console.log(`[Dexter] Group audio transcribed: "${tr.substring(0,80)}"`) }
+            }
+          }
+          if (!groupIncomingText.trim() && !groupImage) continue
+        }
 
         const persona      = loadPersona() || {}
         const allowFrom    = (persona.allowFrom || []).map(n => n.replace(/\s/g, ''))
@@ -1240,11 +1327,11 @@ async function connect() {
           || allowFrom.length === 0
           || allowFrom.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
           || groupAllowed.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
-        console.log(`[Dexter] group — jid:${groupJid} sender:${senderPart} resolved:${resolvedPhone} isOwner:${isOwner} text:${groupText.substring(0,50)}`)
+        console.log(`[Dexter] group — jid:${groupJid} sender:${senderPart} resolved:${resolvedPhone} isOwner:${isOwner} text:${groupIncomingText.substring(0,50)}`)
 
         // Owner commands in any group (no wake word needed)
         if (isOwner) {
-          if (/^dexter\s+join$/i.test(groupText.trim())) {
+          if (/^dexter\s+join$/i.test(groupIncomingText.trim())) {
             const groups = persona.allowedGroups || []
             console.log(`[Dexter] group join — already in list: ${groups.includes(groupJid)}`)
             if (!groups.includes(groupJid)) {
@@ -1257,7 +1344,7 @@ async function connect() {
             }
             continue
           }
-          if (/^dexter\s+leave$/i.test(groupText.trim())) {
+          if (/^dexter\s+leave$/i.test(groupIncomingText.trim())) {
             persona.allowedGroups = (persona.allowedGroups || []).filter(g => g !== groupJid)
             savePersona(persona)
             await sock.sendMessage(groupJid, { text: '👋 Dexter desactivado en este grupo.' })
@@ -1265,7 +1352,7 @@ async function connect() {
           }
 
           // "dexter allow +521234567890" — grant owner-level access in this group to a member
-          const allowMatch = groupText.match(/^dexter\s+allow\s+(\+?[\d\s\-().]+)/i)
+          const allowMatch = groupIncomingText.match(/^dexter\s+allow\s+(\+?[\d\s\-().]+)/i)
           if (allowMatch) {
             const phone = '+' + allowMatch[1].replace(/[^0-9]/g, '')
             if (!persona.groups) persona.groups = {}
@@ -1281,7 +1368,7 @@ async function connect() {
           }
 
           // "dexter deny +521234567890" — revoke owner-level access in this group
-          const denyMatch = groupText.match(/^dexter\s+deny\s+(\+?[\d\s\-().]+)/i)
+          const denyMatch = groupIncomingText.match(/^dexter\s+deny\s+(\+?[\d\s\-().]+)/i)
           if (denyMatch) {
             const phone = denyMatch[1].replace(/[^0-9]/g, '')
             if (persona.groups?.[groupJid]?.allowedMembers) {
@@ -1295,7 +1382,7 @@ async function connect() {
           }
 
           // "dexter set [instrucción]" — persist a standing instruction for this group
-          const setMatch = groupText.match(/^dexter\s+set\s+(.+)/i)
+          const setMatch = groupIncomingText.match(/^dexter\s+set\s+(.+)/i)
           if (setMatch) {
             const instruction = setMatch[1].trim()
             if (!persona.groups) persona.groups = {}
@@ -1308,7 +1395,7 @@ async function connect() {
           }
 
           // "dexter reset" — clear all custom config for this group (instructions, personality, allowed members)
-          if (/^dexter\s+reset$/i.test(groupText.trim())) {
+          if (/^dexter\s+reset$/i.test(groupIncomingText.trim())) {
             if (persona.groups?.[groupJid]) {
               delete persona.groups[groupJid].instructions
               delete persona.groups[groupJid].personality
@@ -1326,7 +1413,7 @@ async function connect() {
         if (!allowedGroups.includes(groupJid)) continue
 
         // "dexter eres [personalidad]" — anyone can set the group personality
-        const eresMatch = groupText.match(/^dexter\s+eres\s+(.+)/i)
+        const eresMatch = groupIncomingText.match(/^dexter\s+eres\s+(.+)/i)
         if (eresMatch) {
           setGroupPersonality(groupJid, eresMatch[1].trim())
           const sent = await sock.sendMessage(groupJid, { text: '✅ Personalidad actualizada.' })
@@ -1338,12 +1425,12 @@ async function connect() {
         // This prevents Dexter from interrupting every message in the conversation.
         // Difference: owner gets full machine/file access, others get restricted access.
         const wakeWord = persona.wake_word !== undefined ? persona.wake_word : 'dexter'
-        if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
+        if (wakeWord && !new RegExp(wakeWord, 'i').test(groupIncomingText)) continue
 
         if (isOwner) {
-          handleGroupChat(groupJid, groupText, true, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
+          handleGroupChat(groupJid, groupIncomingText, true, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
         } else {
-          handleGroupChat(groupJid, groupText, false, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
+          handleGroupChat(groupJid, groupIncomingText, false, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
         }
         continue
       }
@@ -1354,9 +1441,28 @@ async function connect() {
         || msg.message?.imageMessage?.caption
         || ''
       const hasImage = !!msg.message?.imageMessage
+      const hasAudio = !!(msg.message?.audioMessage || msg.message?.pttMessage)
 
-      // Skip if no text and no image
-      if (!text.trim() && !hasImage) continue
+      // Skip if no text, no image, no audio
+      if (!text.trim() && !hasImage && !hasAudio) continue
+
+      // Transcribe audio messages before handling
+      let incomingText = text
+      if (!incomingText.trim() && hasAudio) {
+        console.log(`[Dexter] Audio message received — transcribing with Whisper...`)
+        const audioPath = await downloadAudio(msg)
+        if (audioPath) {
+          const transcript = await transcribeAudio(audioPath)
+          try { fs.unlinkSync(audioPath) } catch (_) {}
+          if (transcript) {
+            incomingText = transcript
+            console.log(`[Dexter] Audio transcribed: "${transcript.substring(0, 80)}"`)
+          } else {
+            console.warn('[Dexter] Whisper returned empty transcript')
+          }
+        }
+        if (!incomingText.trim() && !hasImage) continue
+      }
 
       const persona = loadPersona()
       const cfg = loadConfig()
@@ -1389,12 +1495,19 @@ async function connect() {
         : senderJid
 
       if (isAllowed) {
-        handleAllowedSender(replyJid, text, hasImage ? msg : null).catch(e => console.error('[Dexter] allowed handler error:', e.message))
+        // "dexter reset history" — clear in-memory conversation history for this chat
+        if (/^dexter\s+reset\s*(history|historial)?$/i.test(incomingText.trim())) {
+          chatHistory.delete(replyJid)
+          const sent = await sock.sendMessage(replyJid, { text: '✅ Historial borrado.' })
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          continue
+        }
+        handleAllowedSender(replyJid, incomingText, hasImage ? msg : null).catch(e => console.error('[Dexter] allowed handler error:', e.message))
       } else {
         // Strangers: only respond if they explicitly mention the wake word (default: "dexter")
         const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
-        if (wakeWord && !new RegExp(wakeWord, 'i').test(text)) continue
-        handleUnknownSender(replyJid, text).catch(e => console.error('[Dexter] stranger handler error:', e.message))
+        if (wakeWord && !new RegExp(wakeWord, 'i').test(incomingText)) continue
+        handleUnknownSender(replyJid, incomingText).catch(e => console.error('[Dexter] stranger handler error:', e.message))
       }
     }
   })
