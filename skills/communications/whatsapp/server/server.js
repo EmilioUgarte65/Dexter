@@ -717,7 +717,7 @@ async function connect() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, { trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{}, child: ()=>({ trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{} }) }),
     },
-    printQRInTerminal: false,
+    printQRInTerminal: USE_QR,
     browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     markOnlineOnConnect: false,
@@ -732,10 +732,16 @@ async function connect() {
 
   sock.ev.on('creds.update', saveCreds)
 
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, isNewLogin }) => {
+  sock.ev.on('connection.update', async ({ connection, lastDisconnect, isNewLogin, qr }) => {
+
+    // ── QR code mode ──────────────────────────────────────────────────────────
+    if (USE_QR && qr) {
+      console.log('\n[Dexter] Scan this QR code with WhatsApp (⋮ → Dispositivos vinculados → Vincular dispositivo):\n')
+      return
+    }
 
     // ── Phone number pairing (headless — no QR) ──────────────────────────────
-    if (!sock.authState.creds.registered && !pairingRequested) {
+    if (!USE_QR && !sock.authState.creds.registered && !pairingRequested) {
       pairingRequested = true
       const phone = getMyPhone()
       if (!phone) {
@@ -946,9 +952,12 @@ async function connect() {
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
+const USE_QR = process.argv.includes('--qr') || process.env.WA_QR === '1'
+
 console.log('[Dexter] Starting WhatsApp server...')
 const myPhone = getMyPhone()
 if (myPhone) console.log(`[Dexter] Phone: ${myPhone}`)
+if (USE_QR) console.log('[Dexter] QR mode enabled — scan with WhatsApp to pair')
 
 connect().catch(err => {
   console.error('[Dexter] Fatal error:', err.message)
