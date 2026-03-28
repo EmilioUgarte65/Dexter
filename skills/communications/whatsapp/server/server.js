@@ -777,7 +777,7 @@ async function connect() {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, { trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{}, child: ()=>({ trace: ()=>{}, debug: ()=>{}, info: ()=>{}, warn: ()=>{}, error: ()=>{}, fatal: ()=>{} }) }),
     },
-    printQRInTerminal: USE_QR,
+    printQRInTerminal: false,  // deprecated — we render QR ourselves via qrcode-terminal
     browser: Browsers.ubuntu('Chrome'),
     syncFullHistory: false,
     markOnlineOnConnect: false,
@@ -797,6 +797,12 @@ async function connect() {
     // ── QR code mode ──────────────────────────────────────────────────────────
     if (USE_QR && qr) {
       console.log('\n[Dexter] Scan this QR code with WhatsApp (⋮ → Dispositivos vinculados → Vincular dispositivo):\n')
+      try {
+        const qrcode = require('qrcode-terminal')
+        qrcode.generate(qr, { small: true })
+      } catch (_) {
+        console.log('[Dexter] qrcode-terminal not found — run: npm install qrcode-terminal')
+      }
       return
     }
 
