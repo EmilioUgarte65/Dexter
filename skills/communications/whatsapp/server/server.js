@@ -46,6 +46,7 @@ let pairingRequested = false
 let waitingForPairing = false
 const lidToPhone   = new Map()  // LID (raw) → "+phone" — populated from contacts.upsert
 const sentMsgIds   = new Set()  // IDs of messages Dexter sent — skip on echo to prevent loops
+const processedIds = new Set()  // IDs of messages already processed — deduplicates LID vs phone JID duplicates
 
 // Per-chat conversation history — keeps the last N turns so Claude has context.
 // Key: senderJid, Value: Array of { role: 'user'|'assistant', text: string }
@@ -213,14 +214,15 @@ function setGroupPersonality(groupJid, personality) {
 function buildGroupSystemPrompt(groupJid, isOwner) {
   const persona = loadPersona() || {}
   const ownerName = persona.name || 'el dueño'
+  const lang = persona.language === 'es' ? 'español' : (persona.language || 'el mismo idioma que te hablen')
 
   // Base rules applied to ALL group messages — prevents Claude from leaking
   // coding/terminal context even when running from the Dexter project directory.
   const baseRules = `
 CONTEXTO: Estás respondiendo mensajes en un grupo de WhatsApp. NO eres un asistente de código ni de terminal.
 REGLAS ABSOLUTAS (nunca las rompas):
+- Responde SIEMPRE en ${lang}. Sin excepciones, aunque el contexto interno esté en inglés.
 - Mensajes cortos y naturales, como en un chat real. Sin listas, sin markdown, sin títulos.
-- Responde en el mismo idioma que te hablen.
 - NUNCA menciones terminales, archivos, código, directorios, proyectos de software ni herramientas de desarrollo.
 - NUNCA digas que no puedes hacer algo porque "no tienes acceso" — simplemente responde como una persona.
 - NO menciones que eres una IA a menos que te lo pregunten directamente.`
@@ -273,58 +275,42 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
   }
 
   const useEngram = engramAvailable()
-  let prompt, args
+  let extraArgs
 
   if (useEngram) {
-    // Engram mode: merge group persona system prompt with Engram memory protocol
     const engramPrompt = buildEngramSystemPrompt(groupJid, true)
     const combinedSystemPrompt = `${systemPrompt}\n\n${engramPrompt}`
-    prompt = text
-    args = ['-p', prompt, '--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
+    extraArgs = ['--system-prompt', combinedSystemPrompt, '--dangerously-skip-permissions']
   } else {
-    // Fallback: in-RAM history + group persona system prompt
-    const history = chatHistory.get(groupJid) || []
-    prompt = buildPromptWithHistory(history, text)
-    appendHistory(groupJid, 'user', text)
-    args = ['-p', prompt, '--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
+    extraArgs = ['--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   }
 
-  const spawnEnv = { ...process.env }
-  delete spawnEnv.CLAUDECODE
-
-  // Owner messages run from Dexter root so Claude has full project context.
-  // Non-owner (group chat) runs from home to avoid leaking coding/project context
-  // into what should be a casual WhatsApp conversation.
-  const cwd = isOwner ? path.resolve(__dirname, '../../../..') : os.homedir()
-
-  const response = await new Promise((resolve) => {
-    let stdout = ''
-    let stderr = ''
-    const child = spawn(cli, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd,
-      env: spawnEnv,
-      shell: process.platform === 'win32',
-    })
-    const timer = setTimeout(() => { child.kill('SIGTERM'); resolve(null) }, 60000)
-    child.stdout.on('data', d => { stdout += d.toString() })
-    child.stderr.on('data', d => { stderr += d.toString() })
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      resolve(code === 0 && stdout.trim() ? stdout.trim() : null)
-    })
-    child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] handleGroupChat spawn error:', err.message); resolve(null) })
+  // Group chats run from home — avoids loading Dexter's CLAUDE.md (English boilerplate)
+  const response = await spawnClaude({
+    cli, prompt: text, extraArgs,
+    cwd: os.homedir(),
+    timeoutMs: 60000,
   })
 
   if (response) {
     if (!useEngram) appendHistory(groupJid, 'assistant', response)
-    try {
-      const sent = await sock.sendMessage(groupJid, { text: response })
-      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
-      logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
-    } catch (e) {
-      console.error('[Dexter] sendMessage group error:', e.message)
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const sent = await sock.sendMessage(groupJid, { text: response })
+        if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+        logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
+        break
+      } catch (e) {
+        console.error(`[Dexter] sendMessage group error (attempt ${attempt}/3): ${e.message}`)
+        if (attempt < 3) await new Promise(r => setTimeout(r, 4000))
+      }
     }
+  } else {
+    console.warn('[Dexter] LLM returned empty response for group — sending fallback')
+    try {
+      const sent = await sock.sendMessage(groupJid, { text: 'No pude procesar eso. Intenta de nuevo.' })
+      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+    } catch (_) {}
   }
 }
 
@@ -467,70 +453,93 @@ async function downloadImage(msg) {
   }
 }
 
-// Runs the LLM CLI with an image attachment.
-// Cleans up the temp file after the call.
-function runLLMCliWithImage(cli, prompt, imagePath) {
+// ─── Core spawn helper ────────────────────────────────────────────────────────
+// On Windows, cmd.exe corrupts multiline strings passed as CLI arguments.
+// Fix: write the prompt to a temp file and let PowerShell read it cleanly.
+// On Linux/macOS, spawn claude directly — no shell needed.
+
+function spawnClaude({ cli, prompt, extraArgs = [], cwd, env, timeoutMs = 120000 }) {
   return new Promise((resolve) => {
     let stdout = '', stderr = ''
-    const dexterRoot = path.resolve(__dirname, '../../../..')
-    const spawnEnv = { ...process.env }
+    const spawnEnv = { ...(env || process.env) }
     delete spawnEnv.CLAUDECODE
-    const args = ['-p', prompt, '--image', imagePath, '--dangerously-skip-permissions']
-    const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv, shell: process.platform === 'win32' })
-    const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] Image LLM timed out'); resolve(null) }, 120000)
-    child.stdout.on('data', d => { stdout += d.toString() })
-    child.stderr.on('data', d => { stderr += d.toString() })
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      try { fs.unlinkSync(imagePath) } catch (_) {}  // clean up temp file
-      if (code === 0 && stdout.trim()) { resolve(stdout.trim()) }
-      else { if (stderr) console.error('[Dexter] Image LLM stderr:', stderr.substring(0, 300)); resolve(null) }
-    })
-    child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] Image spawn error:', err.message); resolve(null) })
-  })
-}
 
-function runLLMCli(cli, message) {
-  return new Promise((resolve) => {
-    let stdout = ''
-    let stderr = ''
-    // Run from Dexter project root so Claude picks up DEXTER.md + CLAUDE.md context.
-    // Unset CLAUDECODE env var to avoid "nested session" error when the server
-    // is started from inside an active Claude Code / Antigravity session.
-    const dexterRoot = path.resolve(__dirname, '../../../..')
-    const spawnEnv = { ...process.env }
-    delete spawnEnv.CLAUDECODE
-    const child = spawn(cli, ['-p', message], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: dexterRoot,
-      env: spawnEnv,
-      shell: process.platform === 'win32',
-    })
+    let child
+    let tmpFile = null
+
+    if (process.platform === 'win32') {
+      // Write prompt to temp file — avoids cmd.exe mangling multiline strings
+      tmpFile = path.join(os.tmpdir(), `dexter-prompt-${Date.now()}.txt`)
+      fs.writeFileSync(tmpFile, prompt, 'utf8')
+
+      // PowerShell reads the file into a variable and passes it to claude cleanly
+      const escapedTmp = tmpFile.replace(/'/g, "''")
+      const escapedCli = cli.replace(/'/g, "''")
+      const extraStr   = extraArgs.map(a => `'${a.replace(/'/g, "''")}'`).join(' ')
+      const psCmd = `$p = Get-Content -Raw '${escapedTmp}'; & '${escapedCli}' -p $p ${extraStr}`
+      child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCmd], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd,
+        env: spawnEnv,
+      })
+    } else {
+      child = spawn(cli, ['-p', prompt, ...extraArgs], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd,
+        env: spawnEnv,
+      })
+    }
+
+    const cleanup = () => { if (tmpFile) try { fs.unlinkSync(tmpFile) } catch (_) {} }
 
     const timer = setTimeout(() => {
       child.kill('SIGTERM')
-      console.error('[Dexter] LLM CLI timed out after 120s')
+      cleanup()
+      console.error('[Dexter] LLM timed out')
       resolve(null)
-    }, 120000)
+    }, timeoutMs)
 
     child.stdout.on('data', d => { stdout += d.toString() })
-    child.stderr.on('data', d => { stderr += d.toString() })
+    child.stderr.on('data', d => {
+      const chunk = d.toString()
+      stderr += chunk
+      if (chunk.trim()) console.error('[Dexter] LLM stderr:', chunk.trimEnd())
+    })
 
     child.on('close', (code) => {
       clearTimeout(timer)
-      if (code === 0 && stdout.trim()) {
-        resolve(stdout.trim())
-      } else {
-        if (stderr) console.error(`[Dexter] LLM CLI stderr:`, stderr.substring(0, 300))
-        resolve(null)
-      }
+      cleanup()
+      console.log(`[Dexter] LLM exit code=${code} stdout=${stdout.length}b stderr=${stderr.length}b`)
+      if (code === 0 && stdout.trim()) { resolve(stdout.trim()) }
+      else { resolve(null) }
     })
 
     child.on('error', (err) => {
       clearTimeout(timer)
-      console.error('[Dexter] LLM CLI spawn error:', err.message)
+      cleanup()
+      console.error('[Dexter] LLM spawn error:', err.message)
       resolve(null)
     })
+  })
+}
+
+function runLLMCliWithImage(cli, prompt, imagePath) {
+  const dexterRoot = path.resolve(__dirname, '../../../..')
+  return spawnClaude({
+    cli, prompt,
+    extraArgs: ['--image', imagePath, '--dangerously-skip-permissions'],
+    cwd: dexterRoot,
+    timeoutMs: 120000,
+  }).finally(() => { try { fs.unlinkSync(imagePath) } catch (_) {} })
+}
+
+function runLLMCli(cli, message) {
+  const dexterRoot = path.resolve(__dirname, '../../../..')
+  return spawnClaude({
+    cli, prompt: message,
+    extraArgs: ['--dangerously-skip-permissions'],
+    cwd: dexterRoot,
+    timeoutMs: 120000,
   })
 }
 
@@ -590,30 +599,27 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
   }
 
   const useEngram = engramAvailable()
-  let prompt, args
+  let prompt
 
+  let extraArgs
   if (useEngram) {
-    // Engram mode: Claude manages its own memory via mem_search/mem_save.
-    // No raw history in the prompt — token-efficient and persistent across restarts.
-    // --dangerously-skip-permissions: no interactive prompts in headless mode.
     const systemPrompt = buildEngramSystemPrompt(senderPhone, false)
     prompt = incomingText
-    args = ['-p', prompt, '--system-prompt', systemPrompt, '--dangerously-skip-permissions']
+    extraArgs = ['--system-prompt', systemPrompt, '--dangerously-skip-permissions']
     console.log(`[Dexter] Engram mode — persistent memory active for ${senderPhone}`)
   } else {
-    // Fallback: in-RAM conversation history (lost on server restart).
-    // --dangerously-skip-permissions: no interactive prompts in headless mode.
     const history = chatHistory.get(senderJid) || []
     prompt = buildPromptWithHistory(history, incomingText)
     appendHistory(senderJid, 'user', incomingText)
-    args = ['-p', prompt, '--dangerously-skip-permissions']
+    extraArgs = ['--dangerously-skip-permissions']
     console.log(`[Dexter] RAM history mode (Engram not found) for ${senderPhone}`)
   }
+
+  const dexterRoot = path.resolve(__dirname, '../../../..')
 
   console.log(`[Dexter] Thinking with ${cli}...`)
   try {
     // If an image was sent, download it and pass it to Claude directly.
-    // Skips Engram/RAM prompt building — image + caption is the full context.
     if (imageMsg) {
       const imagePath = await downloadImage(imageMsg)
       if (imagePath) {
@@ -631,21 +637,9 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
       }
     }
 
-    const spawnEnv = { ...process.env }
-    delete spawnEnv.CLAUDECODE
-    const dexterRoot = path.resolve(__dirname, '../../../..')
-    const response = await new Promise((resolve) => {
-      let stdout = '', stderr = ''
-      const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv, shell: process.platform === 'win32' })
-      const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] LLM timed out'); resolve(null) }, 120000)
-      child.stdout.on('data', d => { stdout += d.toString() })
-      child.stderr.on('data', d => { stderr += d.toString() })
-      child.on('close', (code) => {
-        clearTimeout(timer)
-        if (code === 0 && stdout.trim()) { resolve(stdout.trim()) }
-        else { if (stderr) console.error('[Dexter] LLM stderr:', stderr.substring(0, 300)); resolve(null) }
-      })
-      child.on('error', (err) => { clearTimeout(timer); console.error('[Dexter] spawn error:', err.message); resolve(null) })
+    const response = await spawnClaude({
+      cli, prompt, extraArgs,
+      cwd: dexterRoot, timeoutMs: 120000,
     })
 
     if (response) {
@@ -655,7 +649,10 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
       logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
       console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
     } else {
-      console.warn('[Dexter] LLM returned empty response')
+      console.warn('[Dexter] LLM returned empty response — sending fallback')
+      const fallback = 'No pude procesar eso. Intenta de nuevo.'
+      const sent = await sock.sendMessage(senderJid, { text: fallback })
+      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
     }
   } catch (e) {
     console.error('[Dexter] handleAllowedSender error:', e.message)
@@ -845,6 +842,10 @@ async function connect() {
       // Skip messages Dexter sent (prevents infinite loop on echo)
       if (msg.key.id && sentMsgIds.has(msg.key.id)) { sentMsgIds.delete(msg.key.id); continue }
 
+      // Deduplicate: same message can arrive on both LID and phone JID — process only once
+      if (msg.key.id && processedIds.has(msg.key.id)) continue
+      if (msg.key.id) { processedIds.add(msg.key.id); setTimeout(() => processedIds.delete(msg.key.id), 60000) }
+
       // Filter fromMe messages — allow: self-chat and groups (owner writing in group)
       if (msg.key.fromMe) {
         const isGroup = msg.key.remoteJid?.endsWith('@g.us')
@@ -917,9 +918,9 @@ async function connect() {
         if (wakeWord && !new RegExp(wakeWord, 'i').test(groupText)) continue
 
         if (isOwner) {
-          await handleGroupChat(groupJid, groupText, true, groupImage)
+          handleGroupChat(groupJid, groupText, true, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
         } else {
-          await handleGroupChat(groupJid, groupText, false, groupImage)
+          handleGroupChat(groupJid, groupText, false, groupImage).catch(e => console.error('[Dexter] group handler error:', e.message))
         }
         continue
       }
@@ -965,12 +966,12 @@ async function connect() {
         : senderJid
 
       if (isAllowed) {
-        await handleAllowedSender(replyJid, text, hasImage ? msg : null)
+        handleAllowedSender(replyJid, text, hasImage ? msg : null).catch(e => console.error('[Dexter] allowed handler error:', e.message))
       } else {
         // Strangers: only respond if they explicitly mention the wake word (default: "dexter")
         const wakeWord = persona?.wake_word !== undefined ? persona.wake_word : 'dexter'
         if (wakeWord && !new RegExp(wakeWord, 'i').test(text)) continue
-        await handleUnknownSender(replyJid, text)
+        handleUnknownSender(replyJid, text).catch(e => console.error('[Dexter] stranger handler error:', e.message))
       }
     }
   })
