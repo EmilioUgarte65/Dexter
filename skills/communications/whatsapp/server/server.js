@@ -527,6 +527,7 @@ function spawnClaude({ cli, prompt, extraArgs = [], cwd, env, timeoutMs = 120000
       const psCmd = `$p = Get-Content -Raw '${escapedTmp}'; & '${escapedCli}' -p $p ${extraStr}`
       child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', psCmd], {
         stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,  // prevent PowerShell window from flashing on screen
         cwd,
         env: spawnEnv,
       })
