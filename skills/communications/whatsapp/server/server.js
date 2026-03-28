@@ -780,6 +780,16 @@ async function connect() {
       const myLidUser = (sock?.authState?.creds?.me?.lid || '').replace(/[^0-9].*/, '')
       const myPhone   = '+' + (sock?.user?.id || '').replace(/[^0-9].*/, '')
       if (myLidUser && myPhone) lidToPhone.set(myLidUser, myPhone)
+
+      // QR mode: auto-save own phone to allowFrom if not already configured
+      if (USE_QR && myPhone && myPhone !== '+') {
+        const persona = loadPersona() || {}
+        if (!persona.allowFrom || persona.allowFrom.length === 0) {
+          persona.allowFrom = [myPhone]
+          savePersona(persona)
+          console.log(`[Dexter] QR login — saved owner phone: ${myPhone}`)
+        }
+      }
     }
 
     if (connection === 'close') {
