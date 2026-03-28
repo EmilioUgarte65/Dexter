@@ -318,9 +318,13 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
 
   if (response) {
     if (!useEngram) appendHistory(groupJid, 'assistant', response)
-    const sent = await sock.sendMessage(groupJid, { text: response })
-    if (sent?.key?.id) sentMsgIds.add(sent.key.id)
-    logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
+    try {
+      const sent = await sock.sendMessage(groupJid, { text: response })
+      if (sent?.key?.id) sentMsgIds.add(sent.key.id)
+      logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
+    } catch (e) {
+      console.error('[Dexter] sendMessage group error:', e.message)
+    }
   }
 }
 
