@@ -842,9 +842,13 @@ async function connect() {
       // Skip messages Dexter sent (prevents infinite loop on echo)
       if (msg.key.id && sentMsgIds.has(msg.key.id)) { sentMsgIds.delete(msg.key.id); continue }
 
-      // Deduplicate: same message can arrive on both LID and phone JID — process only once
+      // Deduplicate: same message can arrive on both LID and phone JID — process only once.
+      // IMPORTANT: only track messages that have content. Bad MAC / undecrypted messages arrive
+      // with the same ID but no text — adding them here would block the later decrypted retry.
+      const msgHasContent = !!(msg.message?.conversation || msg.message?.extendedTextMessage?.text
+        || msg.message?.imageMessage || msg.message?.imageMessage?.caption)
       if (msg.key.id && processedIds.has(msg.key.id)) continue
-      if (msg.key.id) { processedIds.add(msg.key.id); setTimeout(() => processedIds.delete(msg.key.id), 60000) }
+      if (msg.key.id && msgHasContent) { processedIds.add(msg.key.id); setTimeout(() => processedIds.delete(msg.key.id), 60000) }
 
       // Filter fromMe messages — allow: self-chat and groups (owner writing in group)
       if (msg.key.fromMe) {
