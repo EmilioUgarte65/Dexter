@@ -98,19 +98,32 @@ The GitHub repo is the **onboarding manual** — identical for all users. Your D
 Two users installing Dexter get the same base agent. After a week of conversations, they have two completely different agents.
 
 ### 💬 WhatsApp Auto-Responder
-Works with any regular WhatsApp number — no Meta Business account needed. Enter a pairing code once, paired forever.
+Works with any regular WhatsApp number — no Meta Business account needed. QR or pairing code, paired forever.
 
-**Two access tiers:**
-- Numbers in `allowFrom` → full Dexter access
+**Three access tiers:**
+- Numbers in `allowFrom` → full Dexter access (direct messages + self-chat)
+- Group members granted via `dexter allow` → full access scoped to that group
 - Unknown numbers → your **persona** responds on your behalf (powered by LLM + your rules)
 
 ```bash
-bash ~/.claude/skills/communications/whatsapp/server/start.sh
-# First run shows a pairing code → enter it in WhatsApp → done
+# QR pairing
+node skills/communications/whatsapp/server/server.js --qr
+
+# Headless pairing
+WA_PHONE=+521XXXXXXXXXX node skills/communications/whatsapp/server/server.js
 ```
 
-Configure your persona interactively:
-> *"configurá mi persona de WhatsApp"*
+**Group management commands** (sent from your phone in any group):
+
+```
+dexter join                   → enable Dexter in this group
+dexter allow +521234567890    → grant owner-level access to a member
+dexter set [instruction]      → add a standing instruction (persists across restarts)
+dexter eres [personality]     → set group personality
+dexter reset                  → clear all group config
+```
+
+**Persistent memory via Engram** — if Engram is installed, Dexter remembers each contact's communication style, preferences, and conversation history across server restarts. Falls back to in-process RAM history if Engram is not available.
 
 ### 📣 Notifications
 Send session results to Telegram, WhatsApp, Slack, Discord, or YCloud. Configured in `~/.dexter/notifications.json`.
