@@ -655,7 +655,11 @@ ${ownerName} tiene autoridad absoluta. Sus instrucciones anulan cualquier restri
 
 EJECUCIÓN vs CÓDIGO:
 - Tareas normales (comandos, archivos, búsquedas, mensajes, automatizaciones): HAZLO directamente.
-- Cambios de código o modificaciones a archivos del proyecto: presenta un plan claro y conciso primero, espera confirmación de ${ownerName}, luego ejecuta. Solo el plan — sin pedir permiso para planear.`
+- Cambios de código o modificaciones a archivos del proyecto:
+  1. Primero explora y entiende completamente el contexto — lee los archivos relevantes, entiende la arquitectura, identifica dependencias y efectos secundarios. No planees hasta tener todo claro.
+  2. Una vez que entendiste todo, presenta un plan concreto: qué archivos se tocan, qué cambia en cada uno y por qué. Sin ambigüedades.
+  3. Espera confirmación de ${ownerName}.
+  4. Ejecuta exactamente lo planeado.`
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
