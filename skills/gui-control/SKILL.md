@@ -85,6 +85,9 @@ gui run "<task>"
              parse JSON from stdout
              if action == done → break → save macro
              execute action via pyautogui
+             with 25% probability → spot-check screenshot:
+                 claude asks "did that action succeed?"
+                 if no → log warning, Claude adapts next step
          if max_steps reached → print error, exit 1, do NOT save
 ```
 
@@ -118,6 +121,23 @@ sudo apt install xdotool
 pip install Pillow
 ```
 
+## Verification
+
+When the user says **"no se envió"**, **"no funcionó"**, **"qué pasó"**, **"verificá"**,
+**"it didn't work"**, **"check the screen"** — run `gui verify` immediately:
+
+```bash
+python3 skills/gui-control/scripts/gui.py verify "did the email send?"
+python3 skills/gui-control/scripts/gui.py verify "is the file saved?"
+python3 skills/gui-control/scripts/gui.py verify  # general OK check
+```
+
+Claude takes a screenshot and returns `{"ok": true/false, "note": "what it sees"}`.
+No action is executed — this is read-only.
+
+During a `gui run`, random spot-checks happen automatically (~25% of steps).
+Disable with `--verify-rate 0`. Increase vigilance with `--verify-rate 1.0`.
+
 ## Usage Examples
 
 ```bash
@@ -125,6 +145,11 @@ pip install Pillow
 python3 skills/gui-control/scripts/gui.py run "open a new terminal tab"
 python3 skills/gui-control/scripts/gui.py run "open Firefox" --max-steps 10
 python3 skills/gui-control/scripts/gui.py run "click the send button" --no-macro
+python3 skills/gui-control/scripts/gui.py run "fill the form" --verify-rate 1.0
+
+# Verify the screen after a task (triggered by user complaints)
+python3 skills/gui-control/scripts/gui.py verify "did it send?"
+python3 skills/gui-control/scripts/gui.py verify "is the app open?"
 
 # Check platform capabilities
 python3 skills/gui-control/scripts/gui.py status
@@ -149,5 +174,6 @@ python3 skills/gui-control/scripts/gui.py macro delete open-a-new-terminal-tab
 
 - Default `--max-steps` is 25. Override with `--max-steps N`.
 - `--no-macro` skips both the macro lookup and the post-loop save.
+- `--verify-rate` controls random spot-checks (0.0 = off, 1.0 = after every step). Default: 0.25.
 - Wayland is not supported — pyautogui requires X11. Set `QT_QPA_PLATFORM=xcb` to force X11.
 - On headless servers, launch with `Xvfb :99 -screen 0 1920x1080x24 &` then `DISPLAY=:99 gui run ...`

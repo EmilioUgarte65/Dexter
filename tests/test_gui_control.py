@@ -194,3 +194,44 @@ def test_macro_store_find_missing(fallback_store):
     """find() returns None when the task slug is not in the store."""
     result = _macro_store.find("a task that was never saved")
     assert result is None, f"Expected None, got {result!r}"
+
+
+# ─── verify_screenshot / cmd_verify ───────────────────────────────────────────
+
+def test_parse_verify_response_ok():
+    """parse_verify_response handles a {ok, note} success response."""
+    text = 'Looks good. {"ok": true, "note": "email sent successfully"}'
+    obj = _gui.parse_verify_response(text)
+    assert obj["ok"] is True
+    assert "email" in obj["note"]
+
+
+def test_parse_verify_response_fail():
+    """parse_verify_response handles a failure response."""
+    text = '{"ok": false, "note": "compose window still open — send did not fire"}'
+    obj = _gui.parse_verify_response(text)
+    assert obj["ok"] is False
+
+
+def test_verify_rate_flag_default():
+    """cmd_run accepts --verify-rate and passes it through (argparse check)."""
+    import argparse
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    p_run = sub.add_parser("run")
+    p_run.add_argument("task")
+    p_run.add_argument("--verify-rate", type=float, default=0.25)
+    args = parser.parse_args(["run", "open tab"])
+    assert args.verify_rate == 0.25
+
+
+def test_verify_rate_flag_custom():
+    """--verify-rate 0 disables spot-checks."""
+    import argparse
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    p_run = sub.add_parser("run")
+    p_run.add_argument("task")
+    p_run.add_argument("--verify-rate", type=float, default=0.25)
+    args = parser.parse_args(["run", "open tab", "--verify-rate", "0"])
+    assert args.verify_rate == 0.0

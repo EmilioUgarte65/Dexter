@@ -15,6 +15,7 @@ Usage:
 import argparse
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -41,9 +42,10 @@ BOLD   = "\033[1m"
 
 # ─── Constants ─────────────────────────────────────────────────────────────────
 
-PREFIX      = "[Dexter GUI]"
-MAX_STEPS   = 25
-DEXTER_ROOT = Path(__file__).resolve().parents[3]   # skills/gui-control/scripts/ → Dexter/
+PREFIX       = "[Dexter GUI]"
+MAX_STEPS    = 25
+VERIFY_RATE  = 0.25   # probability of a random spot-check after each action (0.0–1.0)
+DEXTER_ROOT  = Path(__file__).resolve().parents[3]   # skills/gui-control/scripts/ → Dexter/
 
 # ─── Platform detection ────────────────────────────────────────────────────────
 
@@ -347,26 +349,39 @@ def execute_action(action: dict) -> bool:
 
 # ─── Claude response parser ───────────────────────────────────────────────────
 
+def _extract_json(text: str) -> dict:
+    """Extract the first JSON object from a text string. Raises ValueError if none found."""
+    match = re.search(r"\{.*?\}", text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object found in response:\n{text[:300]}")
+    try:
+        return json.loads(match.group(0))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON: {e}\nRaw: {match.group(0)[:200]}") from e
+
+
 def parse_claude_response(text: str) -> dict:
     """
     Extract the first JSON object from Claude's stdout.
     Validates that 'action' key is present.
     Raises ValueError if no valid JSON action found.
     """
-    # Find first {...} block (may span multiple lines)
-    match = re.search(r"\{.*?\}", text, re.DOTALL)
-    if not match:
-        raise ValueError(f"No JSON object found in Claude response:\n{text[:300]}")
-
-    try:
-        obj = json.loads(match.group(0))
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid JSON in Claude response: {e}\nRaw: {match.group(0)[:200]}") from e
-
+    obj = _extract_json(text)
     if "action" not in obj:
         raise ValueError(f"JSON missing 'action' key: {obj}")
-
     return obj
+
+
+def parse_verify_response(text: str) -> dict:
+    """
+    Extract a verify-style {ok, note} response from Claude's stdout.
+    Falls back to {"ok": False, "note": raw_text} if no JSON found.
+    """
+    try:
+        obj = _extract_json(text)
+        return {"ok": bool(obj.get("ok", False)), "note": str(obj.get("note", ""))}
+    except ValueError:
+        return {"ok": False, "note": text.strip()[:200]}
 
 
 # ─── Vision loop ──────────────────────────────────────────────────────────────
@@ -390,7 +405,7 @@ Available actions:
 """
 
 
-def run_vision_loop(task: str, max_steps: int, system_prompt: str) -> list:
+def run_vision_loop(task: str, max_steps: int, system_prompt: str, verify_rate: float = VERIFY_RATE) -> list:
     """
     Execute the computer-use vision loop.
     Returns the list of executed step dicts.
@@ -476,6 +491,19 @@ def run_vision_loop(task: str, max_steps: int, system_prompt: str) -> list:
         execute_action(action)
         steps.append(action)
 
+        # 7. Random spot-check verification
+        if verify_rate > 0 and random.random() < verify_rate:
+            action_desc = json.dumps(action)
+            spot_prompt = _SPOT_CHECK_PROMPT.format(action=action_desc)
+            print(f"  {YELLOW}[spot-check]{RESET}", end=" ")
+            verdict = verify_screenshot(spot_prompt)
+            if not verdict.get("ok"):
+                print(
+                    f"{YELLOW}{PREFIX} Spot-check failed on step {i}: {verdict.get('note', '')}{RESET}\n"
+                    f"  Continuing — Claude will adapt on the next step.",
+                    file=sys.stderr,
+                )
+
     return steps
 
 
@@ -491,7 +519,7 @@ def replay_macro(steps: list) -> None:
 
 # ─── Subcommand handlers ──────────────────────────────────────────────────────
 
-def cmd_run(task: str, max_steps: int, no_macro: bool) -> None:
+def cmd_run(task: str, max_steps: int, no_macro: bool, verify_rate: float = VERIFY_RATE) -> None:
     """
     Run a GUI task — macro replay on cache hit, vision loop on miss.
     """
@@ -531,7 +559,7 @@ def cmd_run(task: str, max_steps: int, no_macro: bool) -> None:
     print(f"{BLUE}{PREFIX} Starting vision loop for: {task!r}{RESET}")
     print(f"  Max steps: {max_steps} | Platform: {info['os']} / {info['display_server']}\n")
 
-    steps = run_vision_loop(task, max_steps, _SYSTEM_PROMPT)
+    steps = run_vision_loop(task, max_steps, _SYSTEM_PROMPT, verify_rate=verify_rate)
 
     # Check if loop ended with done
     if steps and steps[-1].get("action") == "done":
@@ -630,6 +658,99 @@ def cmd_macro_delete(slug: str) -> None:
     print(f"{GREEN}{PREFIX} Macro deleted: {slug}{RESET}")
 
 
+# ─── Verify screenshot ────────────────────────────────────────────────────────
+
+_VERIFY_SYSTEM_PROMPT = """\
+You are a GUI verification agent. Look at the screenshot and answer whether the
+described situation is correct or if something went wrong. Reply with exactly one
+JSON object — no prose. Format:
+{"ok": true, "note": "brief description of what you see"}
+{"ok": false, "note": "what went wrong or what is missing"}
+"""
+
+_SPOT_CHECK_PROMPT = """\
+You are a GUI verification agent. Look at the screenshot taken immediately after
+executing this action: {action}
+
+Did the action have the expected effect on the screen?
+Reply with exactly one JSON object:
+{"ok": true, "note": "brief description of the current screen state"}
+{"ok": false, "note": "what seems wrong or did not change as expected"}
+"""
+
+
+def verify_screenshot(prompt: str, context: str = "") -> dict:
+    """
+    Take a screenshot and ask Claude whether everything looks OK.
+    Returns: {"ok": bool, "note": str}
+    Prints the result to stdout with color coding.
+    """
+    ts   = int(datetime.now(timezone.utc).timestamp())
+    path = f"/tmp/dexter_verify_{ts}.png"
+
+    try:
+        take_screenshot(path)
+    except RuntimeError as e:
+        print(f"{RED}{PREFIX} Verify screenshot failed: {e}{RESET}", file=sys.stderr)
+        return {"ok": False, "note": str(e)}
+
+    claude_cmd = shutil.which("claude")
+    if not claude_cmd:
+        print(f"{RED}{PREFIX} 'claude' CLI not found — cannot verify.{RESET}", file=sys.stderr)
+        return {"ok": False, "note": "claude CLI not found"}
+
+    full_prompt = _VERIFY_SYSTEM_PROMPT
+    if context:
+        full_prompt += f"\n\nContext: {context}"
+    full_prompt += f"\n\nQuestion: {prompt}"
+
+    env = dict(os.environ)
+    env.pop("CLAUDECODE", None)
+
+    try:
+        result = subprocess.run(
+            [claude_cmd, "-p", full_prompt,
+             "--image", path,
+             "--dangerously-skip-permissions"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"{YELLOW}{PREFIX} Verify timed out.{RESET}", file=sys.stderr)
+        return {"ok": False, "note": "timeout"}
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+    verdict = parse_verify_response(result.stdout)
+
+    ok   = verdict.get("ok", False)
+    note = verdict.get("note", "")
+    color = GREEN if ok else RED
+    icon  = "✓" if ok else "✗"
+    print(f"  {color}{icon} {note}{RESET}")
+
+    return verdict
+
+
+def cmd_verify(prompt: str, context: str) -> None:
+    """
+    gui verify — take a screenshot and let Claude assess what's on screen.
+    Triggered by: 'no se envió', 'no funcionó', 'qué pasó', or manually.
+    """
+    info = detect_platform()
+    if not info["has_display"] or info["wayland"]:
+        print(f"{RED}{PREFIX} No display available for verification.{RESET}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"{BLUE}{PREFIX} Taking verification screenshot...{RESET}")
+    verdict = verify_screenshot(prompt or "Is everything on screen OK? Did the last action work?", context)
+
+    if not verdict.get("ok"):
+        sys.exit(1)
+
+
 # ─── Entry point ──────────────────────────────────────────────────────────────
 
 def main():
@@ -661,6 +782,24 @@ def main():
         "--no-macro", action="store_true",
         help="Skip macro lookup and do not save after completion",
     )
+    p_run.add_argument(
+        "--verify-rate", type=float, default=VERIFY_RATE, metavar="0.0-1.0",
+        help=f"Probability of a random spot-check screenshot after each action (default: {VERIFY_RATE}). 0 disables.",
+    )
+
+    # ── verify ────────────────────────────────────────────────────────────────
+    p_verify = sub.add_parser(
+        "verify",
+        help="Take a screenshot and ask Claude if everything looks OK",
+    )
+    p_verify.add_argument(
+        "prompt", nargs="?", default="",
+        help="What to check (e.g. 'did the email send?'). Defaults to a general OK check.",
+    )
+    p_verify.add_argument(
+        "--context", default="",
+        help="Extra context for Claude (e.g. the task that was just run)",
+    )
 
     # ── status ────────────────────────────────────────────────────────────────
     sub.add_parser("status", help="Show platform capability checks")
@@ -680,7 +819,10 @@ def main():
     args = parser.parse_args()
 
     if args.command == "run":
-        cmd_run(args.task, args.max_steps, args.no_macro)
+        cmd_run(args.task, args.max_steps, args.no_macro, args.verify_rate)
+
+    elif args.command == "verify":
+        cmd_verify(args.prompt, args.context)
 
     elif args.command == "status":
         cmd_status()

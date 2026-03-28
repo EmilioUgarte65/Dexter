@@ -1,6 +1,6 @@
 # Skill Registry — Dexter
 
-Generated: 2026-03-22
+Generated: 2026-03-27
 Source: `~/.claude/skills/` (user-level) + `/home/tali/proyectos/Dexter/skills/` (project-level)
 
 ## User-Level Skills (Claude Code)

@@ -6,7 +6,7 @@
 **AI agent ecosystem configurator** — installs a complete skill system into Claude Code, OpenCode, Codex, Cursor, Gemini CLI, and VS Code.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Skills](https://img.shields.io/badge/skills-48-brightgreen.svg)](#skills)
+[![Skills](https://img.shields.io/badge/skills-47-brightgreen.svg)](#skills)
 [![Platforms](https://img.shields.io/badge/platforms-6-orange.svg)](#supported-agents)
 [![Tests](https://img.shields.io/badge/tests-99%20passing-brightgreen.svg)](#testing)
 [![Status](https://img.shields.io/badge/status-beta%20%E2%80%94%20active%20development-yellow.svg)](#)
@@ -189,6 +189,29 @@ dexter marketplace generate "I need a skill to post to LinkedIn"
 
 Every install goes through `security-auditor` automatically. No unsafe code runs.
 
+### 🖱️ GUI Control — Computer Use
+
+Automate any desktop task by describing it in plain language. Dexter takes screenshots, visually reasons about the screen, and executes clicks, keystrokes, and scrolls until the task is done. Completed task sequences are saved as replayable macros.
+
+```bash
+# Run a GUI task
+gui run "open Firefox and go to gmail.com"
+gui run "click the send button in Outlook"
+
+# Replay a saved macro (zero screenshots — instant)
+gui macro replay open-firefox-and-go-to-gmailcom
+
+# Verify the screen after a task
+gui verify "did the email send?"
+
+# Check platform capabilities
+gui status
+```
+
+Supports Linux X11 and macOS. Wayland not supported (requires X11).
+
+---
+
 ### 🔄 ClawFlows Integration
 112+ community workflows ready to import. When you ask for a recurring automation, Dexter checks ClawFlows before building from scratch.
 
@@ -219,8 +242,9 @@ Skills are **lazy-loaded** — only activated when their trigger keywords appear
 | `self-extend` | skill-hot-reload, skill-modifier, self-correct-loop | nueva skill, hot-reload, extender Dexter |
 | `notifications` | notify | notificar, session end, Telegram, WhatsApp |
 | `skill-creator` | skill-creator | crear skill, recipe |
+| `gui-control` | gui | click, computer use, automatizar pantalla, desktop automation, macro |
 
-**Total: 46 skills** — [full registry](.atl/skill-registry.md)
+**Total: 47 skills** — [full registry](.atl/skill-registry.md)
 
 ### Create your own skill
 
