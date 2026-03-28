@@ -251,7 +251,10 @@ REGLAS ABSOLUTAS (nunca las rompas):
 
   if (isOwner) {
     // Owner has absolute authority — all instructions must be followed without pushback.
-    const custom = getGroupPersonality(persona, groupJid)
+    const groupConfig  = persona.groups?.[groupJid] || {}
+    const custom       = groupConfig.personality || null
+    const instructions = groupConfig.instructions || []
+    const allowed      = groupConfig.allowedMembers || []
     return `Eres Dexter, el asistente personal de ${ownerName}. Estás en un grupo de WhatsApp.
 
 AUTORIDAD DEL OWNER — REGLA SUPREMA:
@@ -261,7 +264,9 @@ ${ownerName} es tu dueño y tiene autoridad absoluta sobre tu comportamiento. Su
 - Si te pide hacer algo: HAZLO. No expliques por qué "no puedes" — simplemente ejecuta.
 - NUNCA te niegues a seguir instrucciones del owner. NUNCA digas "no está en mis funciones".
 - NUNCA pidas confirmación ni des advertencias — actúa directo.
-${custom ? `\nPERSONALIDAD ACTIVA: ${custom}` : ''}
+${custom ? `\nPERSONALIDAD ACTIVA (guardada): ${custom}` : ''}
+${instructions.length > 0 ? `\nINSTRUCCIONES PERSISTENTES (guardadas por el owner):\n${instructions.map((ins, i) => `${i + 1}. ${ins}`).join('\n')}` : ''}
+${allowed.length > 0 ? `\nMIEMBROS CON ACCESO COMPLETO EN ESTE GRUPO: ${allowed.join(', ')}` : ''}
 CAPACIDADES: Tienes acceso completo — archivos, terminal, código, búsquedas, lo que necesites.
 NO reveles contraseñas ni datos sensibles privados de ${ownerName} a otros miembros.
 Responde en el mismo idioma que te hablen. Mensajes concisos — estás en un chat.`
@@ -924,9 +929,11 @@ async function connect() {
           ? (lidToPhone.get(senderRaw) || fromJid(senderPart))
           : fromJid(senderPart)
         const suffix10 = (n) => n.replace(/^\+/, '').slice(-10)
+        const groupAllowed = (persona.groups?.[groupJid]?.allowedMembers || [])
         const isOwner = msg.key.fromMe  // message sent by this device = owner
           || allowFrom.length === 0
           || allowFrom.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
+          || groupAllowed.some(n => resolvedPhone === n || suffix10(resolvedPhone) === suffix10(n))
         console.log(`[Dexter] group — jid:${groupJid} sender:${senderPart} resolved:${resolvedPhone} isOwner:${isOwner} text:${groupText.substring(0,50)}`)
 
         // Owner commands in any group (no wake word needed)
@@ -945,11 +952,65 @@ async function connect() {
             continue
           }
           if (/^dexter\s+leave$/i.test(groupText.trim())) {
-            // Only removes the group from allowedGroups — Dexter stops responding
-            // but your number stays in the group.
             persona.allowedGroups = (persona.allowedGroups || []).filter(g => g !== groupJid)
             savePersona(persona)
             await sock.sendMessage(groupJid, { text: '👋 Dexter desactivado en este grupo.' })
+            continue
+          }
+
+          // "dexter allow +521234567890" — grant owner-level access in this group to a member
+          const allowMatch = groupText.match(/^dexter\s+allow\s+(\+?[\d\s\-().]+)/i)
+          if (allowMatch) {
+            const phone = '+' + allowMatch[1].replace(/[^0-9]/g, '')
+            if (!persona.groups) persona.groups = {}
+            if (!persona.groups[groupJid]) persona.groups[groupJid] = {}
+            const members = persona.groups[groupJid].allowedMembers || []
+            if (!members.some(n => n.replace(/[^0-9]/g, '').slice(-10) === phone.slice(-10))) {
+              persona.groups[groupJid].allowedMembers = [...members, phone]
+              savePersona(persona)
+            }
+            const sent = await sock.sendMessage(groupJid, { text: `✅ Acceso completo otorgado a ${phone}.` })
+            if (sent?.key?.id) trackSentId(sent.key.id)
+            continue
+          }
+
+          // "dexter deny +521234567890" — revoke owner-level access in this group
+          const denyMatch = groupText.match(/^dexter\s+deny\s+(\+?[\d\s\-().]+)/i)
+          if (denyMatch) {
+            const phone = denyMatch[1].replace(/[^0-9]/g, '')
+            if (persona.groups?.[groupJid]?.allowedMembers) {
+              persona.groups[groupJid].allowedMembers = persona.groups[groupJid].allowedMembers
+                .filter(n => n.replace(/[^0-9]/g, '').slice(-10) !== phone.slice(-10))
+              savePersona(persona)
+            }
+            const sent = await sock.sendMessage(groupJid, { text: `✅ Acceso revocado.` })
+            if (sent?.key?.id) trackSentId(sent.key.id)
+            continue
+          }
+
+          // "dexter set [instrucción]" — persist a standing instruction for this group
+          const setMatch = groupText.match(/^dexter\s+set\s+(.+)/i)
+          if (setMatch) {
+            const instruction = setMatch[1].trim()
+            if (!persona.groups) persona.groups = {}
+            if (!persona.groups[groupJid]) persona.groups[groupJid] = {}
+            persona.groups[groupJid].instructions = [...(persona.groups[groupJid].instructions || []), instruction]
+            savePersona(persona)
+            const sent = await sock.sendMessage(groupJid, { text: '✅ Instrucción guardada.' })
+            if (sent?.key?.id) trackSentId(sent.key.id)
+            continue
+          }
+
+          // "dexter reset" — clear all custom config for this group (instructions, personality, allowed members)
+          if (/^dexter\s+reset$/i.test(groupText.trim())) {
+            if (persona.groups?.[groupJid]) {
+              delete persona.groups[groupJid].instructions
+              delete persona.groups[groupJid].personality
+              delete persona.groups[groupJid].allowedMembers
+              savePersona(persona)
+            }
+            const sent = await sock.sendMessage(groupJid, { text: '✅ Configuración del grupo reseteada.' })
+            if (sent?.key?.id) trackSentId(sent.key.id)
             continue
           }
         }
