@@ -603,8 +603,16 @@ async function downloadImage(msg) {
 // Downloads a WhatsApp audio/PTT message to a temp .ogg file. Returns path or null.
 async function downloadAudio(msg) {
   try {
+    const audioMsg = msg.message?.audioMessage || msg.message?.pttMessage
+    if (!audioMsg) return null
+    // Require media keys — if absent, the message is still encrypted/undecryptable
+    if (!audioMsg.mediaKey && !audioMsg.url) {
+      console.warn('[Dexter] Audio message has no mediaKey/url — skipping download')
+      return null
+    }
     const { downloadMediaMessage } = require('@whiskeysockets/baileys')
     const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: { info: () => {}, error: () => {} } })
+    if (!buffer || buffer.length === 0) return null
     const file = path.join(os.tmpdir(), `dexter-audio-${Date.now()}.ogg`)
     fs.writeFileSync(file, buffer)
     return file
@@ -1256,7 +1264,7 @@ async function connect() {
     console.log(`[Dexter] messages.upsert type=${type} count=${messages.length}`)
     if (type !== 'notify') return
 
-    for (const msg of messages) {
+    for (const msg of messages) { try {
       console.log(`[Dexter] raw — remoteJid:${msg.key.remoteJid} fromMe:${msg.key.fromMe} hasText:${!!(msg.message?.conversation || msg.message?.extendedTextMessage?.text)}`)
 
       if (msg.key.remoteJid === 'status@broadcast') continue
@@ -1509,7 +1517,7 @@ async function connect() {
         if (wakeWord && !new RegExp(wakeWord, 'i').test(incomingText)) continue
         handleUnknownSender(replyJid, incomingText).catch(e => console.error('[Dexter] stranger handler error:', e.message))
       }
-    }
+    } catch (e) { console.error('[Dexter] message loop error (non-fatal):', e.message, e.stack?.split('\n')[1]) } }
   })
 }
 
