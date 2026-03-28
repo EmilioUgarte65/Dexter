@@ -744,9 +744,12 @@ function spawnClaude({ cli, prompt, extraArgs = [], cwd, env, timeoutMs = 120000
 
 function runLLMCliWithImage(cli, prompt, imagePath) {
   const dexterRoot = DEXTER_ROOT
+  // --image flag does not exist in Claude CLI — embed the path in the prompt so Claude reads it via Read tool
+  const normalizedPath = imagePath.replace(/\\/g, '/')
+  const fullPrompt = `Lee la imagen en: ${normalizedPath}\n\n${prompt}`
   return spawnClaude({
-    cli, prompt,
-    extraArgs: ['--image', imagePath, '--dangerously-skip-permissions'],
+    cli, prompt: fullPrompt,
+    extraArgs: ['--dangerously-skip-permissions'],
     cwd: dexterRoot,
     timeoutMs: 120000,
   }).finally(() => { try { fs.unlinkSync(imagePath) } catch (_) {} })
