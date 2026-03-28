@@ -16,6 +16,9 @@
  *
  * API:
  *   POST /api/sendText   { "to": "+1234567890", "text": "Hello" }
+ *   POST /api/sendImage  { "to": "+1234567890", "imageUrl": "https://..." }
+ *                        { "to": "+1234567890", "imageBase64": "<b64>", "mimeType": "image/jpeg" }
+ *                        optional: "caption": "text"
  *   GET  /status
  *
  * Usage:
@@ -488,6 +491,31 @@ function appendHistory(jid, role, text) {
   if (history.length > HISTORY_LIMIT) history.splice(0, history.length - HISTORY_LIMIT)
 }
 
+// Fetches a remote URL and returns its content as a Buffer.
+// Follows up to 5 redirects. Rejects on non-2xx or network error.
+function fetchUrlBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith('https') ? require('https') : require('http')
+    let redirects = 0
+    const get = (u) => {
+      mod.get(u, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          if (++redirects > 5) return reject(new Error('Too many redirects'))
+          return get(res.headers.location)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`HTTP ${res.statusCode}`))
+        }
+        const chunks = []
+        res.on('data', c => chunks.push(c))
+        res.on('end', () => resolve(Buffer.concat(chunks)))
+        res.on('error', reject)
+      }).on('error', reject)
+    }
+    get(url)
+  })
+}
+
 // Downloads a WhatsApp image message to a temp file and returns the path.
 // Returns null if download fails.
 async function downloadImage(msg) {
@@ -762,6 +790,40 @@ function startHttpServer() {
             return res.end(JSON.stringify({ ok: false, error: 'recipient not in allowFrom list' }))
           }
           await sock.sendMessage(toJid(to), { text })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true }))
+        } catch (e) {
+          res.writeHead(500, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: e.message }))
+        }
+      })
+
+    } else if (req.method === 'POST' && req.url === '/api/sendImage') {
+      let body = ''
+      req.on('data', chunk => { body += chunk })
+      req.on('end', async () => {
+        try {
+          const { to, imageUrl, imageBase64, mimeType, caption } = JSON.parse(body)
+          if (!to || (!imageUrl && !imageBase64)) {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            return res.end(JSON.stringify({ ok: false, error: 'missing to and (imageUrl or imageBase64)' }))
+          }
+          const cfg = loadConfig()
+          const allowFrom = cfg.whatsapp?.allowFrom || []
+          if (allowFrom.length > 0 && !allowFrom.includes(to)) {
+            res.writeHead(403, { 'Content-Type': 'application/json' })
+            return res.end(JSON.stringify({ ok: false, error: 'recipient not in allowFrom list' }))
+          }
+          let buffer
+          if (imageUrl) {
+            buffer = await fetchUrlBuffer(imageUrl)
+          } else {
+            buffer = Buffer.from(imageBase64, 'base64')
+          }
+          const msg = { image: buffer }
+          if (caption) msg.caption = caption
+          if (mimeType) msg.mimetype = mimeType
+          await sock.sendMessage(toJid(to), msg)
           res.writeHead(200, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ ok: true }))
         } catch (e) {

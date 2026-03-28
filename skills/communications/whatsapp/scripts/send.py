@@ -160,6 +160,38 @@ def cmd_send_media(phone: str, file_path: str, caption: Optional[str] = None):
         print(f"  Message ID: {result['id']}")
 
 
+def cmd_send_image(phone: str, source: str, caption: Optional[str] = None):
+    """Send an image from a local file path or a URL."""
+    phone = phone.lstrip("+")
+    to = f"+{phone}"
+
+    payload: dict = {"to": to}
+    if caption:
+        payload["caption"] = caption
+
+    if source.startswith("http://") or source.startswith("https://"):
+        payload["imageUrl"] = source
+    else:
+        if not os.path.isfile(source):
+            print(f"{RED}File not found: {source}{RESET}", file=sys.stderr)
+            sys.exit(1)
+        import base64
+        import mimetypes as _mt
+        mime, _ = _mt.guess_type(source)
+        mime = mime or "image/jpeg"
+        with open(source, "rb") as f:
+            payload["imageBase64"] = base64.b64encode(f.read()).decode()
+        payload["mimeType"] = mime
+
+    result = api_post("/api/sendImage", payload)
+    label = source if source.startswith("http") else os.path.basename(source)
+    print(f"{GREEN}Image sent to {to}: {label}{RESET}")
+    if caption:
+        print(f"  Caption: {caption}")
+    if result.get("id"):
+        print(f"  Message ID: {result['id']}")
+
+
 def cmd_status():
     # Server exposes GET /status → { "ok": bool, "ready": bool, "persona": str|null }
     result = api_get("/status")
@@ -188,6 +220,12 @@ def main():
     p_media.add_argument("file", help="Path to the file to send")
     p_media.add_argument("caption", nargs="?", help="Optional caption")
 
+    # send-image
+    p_img = subparsers.add_parser("send-image", help="Send an image (local file or URL)")
+    p_img.add_argument("phone", help="Phone in international format without + (e.g. 521XXXXXXXXXX)")
+    p_img.add_argument("source", help="Local file path or image URL (http/https)")
+    p_img.add_argument("caption", nargs="?", help="Optional caption")
+
     # status
     subparsers.add_parser("status", help="Check session/connection status")
 
@@ -198,6 +236,8 @@ def main():
         cmd_send(args.phone, args.message)
     elif args.command == "send-media":
         cmd_send_media(args.phone, args.file, getattr(args, "caption", None))
+    elif args.command == "send-image":
+        cmd_send_image(args.phone, args.source, getattr(args, "caption", None))
     elif args.command == "status":
         cmd_status()
 
