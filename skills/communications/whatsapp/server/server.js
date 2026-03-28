@@ -338,15 +338,36 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
 
   if (response) {
     if (!useEngram) appendHistory(groupJid, 'assistant', response)
-    for (let attempt = 1; attempt <= 3; attempt++) {
+
+    const { images, text } = extractSendImageTokens(response)
+
+    // Send image files first
+    for (const { path: imgPath, caption } of images) {
       try {
-        const sent = await sock.sendMessage(groupJid, { text: response })
+        if (!fs.existsSync(imgPath)) { console.warn(`[Dexter] Image not found: ${imgPath}`); continue }
+        const buffer = fs.readFileSync(imgPath)
+        const msg = { image: buffer }
+        if (caption) msg.caption = caption
+        const sent = await sock.sendMessage(groupJid, msg)
         if (sent?.key?.id) trackSentId(sent.key.id)
-        logMessage({ direction: 'out', to: groupJid, text: response, tier: 'group' })
-        break
-      } catch (e) {
-        console.error(`[Dexter] sendMessage group error (attempt ${attempt}/3): ${e.message}`)
-        if (attempt < 3) await new Promise(r => setTimeout(r, 4000))
+        logMessage({ direction: 'out', to: groupJid, text: `[image: ${imgPath}]`, tier: 'group' })
+      } catch (imgErr) {
+        console.error(`[Dexter] Failed to send image ${imgPath}:`, imgErr.message)
+      }
+    }
+
+    // Send remaining text if any
+    if (text) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const sent = await sock.sendMessage(groupJid, { text })
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          logMessage({ direction: 'out', to: groupJid, text, tier: 'group' })
+          break
+        } catch (e) {
+          console.error(`[Dexter] sendMessage group error (attempt ${attempt}/3): ${e.message}`)
+          if (attempt < 3) await new Promise(r => setTimeout(r, 4000))
+        }
       }
     }
   } else {
@@ -692,12 +713,28 @@ EJECUCIÓN vs CÓDIGO:
   4. Ejecuta exactamente lo planeado.
 
 ENVIAR IMÁGENES POR WHATSAPP — REGLA OBLIGATORIA:
-- Comando para enviar imagen: python3 "${sendPy}" send-image ${ownerPhone} <ruta-o-url> [caption]
-- Si te piden un screenshot o una imagen: ENVIÁ EL ARCHIVO. NO describas la imagen con texto. El flujo es:
-  1. Capturá o localizá el archivo de imagen
-  2. Ejecutá: python3 "${sendPy}" send-image ${ownerPhone} <ruta> [caption]
-  3. Respondé solo con una confirmación corta (ej: "Listo, enviada 📸")
-- NUNCA respondas describiendo el contenido de una imagen cuando te piden que la envíes.`
+- Cuando te pidan una imagen, screenshot, o archivo visual: capturá o localizá el archivo y respondé con el token:
+  [SEND_IMAGE:/ruta/al/archivo.png]
+  o con caption:
+  [SEND_IMAGE:/ruta/al/archivo.png|Texto del caption]
+- El servidor detecta ese token, envía la imagen por WhatsApp automáticamente.
+- Podés incluir texto antes o después del token (ej: "Listo 📸 [SEND_IMAGE:/tmp/ss.png|Screenshot]")
+- NUNCA describas el contenido de una imagen cuando te piden que la envíes — usá el token.`
+}
+
+// ─── Image token parser ───────────────────────────────────────────────────────
+// Claude signals image sending with [SEND_IMAGE:/path] or [SEND_IMAGE:/path|caption].
+// Returns { images: [{path, caption}], text: string } — text has tokens stripped.
+
+function extractSendImageTokens(response) {
+  const TOKEN_RE = /\[SEND_IMAGE:([^\]|]+)(?:\|([^\]]*))?\]/g
+  const images = []
+  let match
+  while ((match = TOKEN_RE.exec(response)) !== null) {
+    images.push({ path: match[1].trim(), caption: (match[2] || '').trim() || undefined })
+  }
+  const text = response.replace(/\[SEND_IMAGE:[^\]]*\]/g, '').replace(/\s{2,}/g, ' ').trim()
+  return { images, text }
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
@@ -761,10 +798,35 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
 
     if (response) {
       if (!useEngram) appendHistory(senderJid, 'assistant', response)
-      const sent = await sock.sendMessage(senderJid, { text: response })
-      if (sent?.key?.id) trackSentId(sent.key.id)
-      logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
-      console.log(`[Dexter] → ${senderPhone}: ${response.substring(0, 80)}`)
+
+      const { images, text } = extractSendImageTokens(response)
+
+      // Send image files first
+      for (const { path: imgPath, caption } of images) {
+        try {
+          if (!fs.existsSync(imgPath)) {
+            console.warn(`[Dexter] Image not found: ${imgPath}`)
+            continue
+          }
+          const buffer = fs.readFileSync(imgPath)
+          const msg = { image: buffer }
+          if (caption) msg.caption = caption
+          const sent = await sock.sendMessage(senderJid, msg)
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          logMessage({ direction: 'out', to: senderPhone, text: `[image: ${imgPath}]`, tier: 'allowed-llm' })
+          console.log(`[Dexter] → ${senderPhone}: [image sent] ${imgPath}`)
+        } catch (imgErr) {
+          console.error(`[Dexter] Failed to send image ${imgPath}:`, imgErr.message)
+        }
+      }
+
+      // Send remaining text if any
+      if (text) {
+        const sent = await sock.sendMessage(senderJid, { text })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+        logMessage({ direction: 'out', to: senderPhone, text, tier: 'allowed-llm' })
+        console.log(`[Dexter] → ${senderPhone}: ${text.substring(0, 80)}`)
+      }
     } else {
       console.warn('[Dexter] LLM returned empty response — sending fallback')
       const fallback = 'No pude procesar eso. Intenta de nuevo.'
