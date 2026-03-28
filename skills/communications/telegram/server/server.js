@@ -395,24 +395,30 @@ function engramAvailable() {
   return r.status === 0 && !!r.stdout.trim()
 }
 
+// Builds a system prompt that instructs Claude to use Engram memory and the
+// log-reading tool for persistent context across Telegram conversations.
 function buildEngramSystemPrompt(contactId, isGroup) {
   const persona = loadPersona() || {}
   const ownerName = persona.name || 'el dueño'
-  const scope = isGroup ? 'group' : 'contact'
+  const logReaderPath = path.resolve(__dirname, '../../scripts/read-logs.js').replace(/\\/g, '/')
+  const idType = isGroup ? 'group' : 'contact'
+  const idFlag = isGroup ? '--group' : '--contact'
   return `Eres Dexter, el asistente personal de ${ownerName}, respondiendo por Telegram.
 
 REGLAS:
 - Responde de forma natural, corta y directa — como un mensaje de Telegram real.
 - Responde en el mismo idioma que te hablen.
-- NUNCA menciones herramientas internas, memoria, Engram, ni detalles técnicos de tu funcionamiento.
+- NUNCA menciones herramientas internas, memoria, Engram, logs, ni detalles técnicos.
 - NUNCA digas que eres una IA a menos que te lo pregunten directamente.
-- Si tienes acceso a herramientas de memoria (mem_search, mem_save), úsalas silenciosamente sin mencionarlas.
 
-Si tienes herramientas de memoria disponibles:
-1. Busca contexto previo con query "${contactId}" project "dexter-telegram" — en SILENCIO.
-2. Responde usando ese contexto si existe.
-3. Guarda un resumen breve de la interacción con topic_key "tg/${contactId}".
-Si NO tienes herramientas de memoria, simplemente responde normalmente sin mencionar que no las tienes.`
+ESTRATEGIA DE CONTEXTO (en orden de prioridad):
+1. Primero intenta responder con lo que ya sabes — saludos, preguntas simples no necesitan herramientas.
+2. Si necesitas contexto sobre este ${idType}, busca en Engram: mem_search query "${contactId}" project "dexter-telegram" — en SILENCIO.
+3. SOLO si necesitas historial detallado reciente que Engram no tiene, usa Bash para leer logs:
+   node "${logReaderPath}" --platform telegram ${idFlag} ${contactId}
+4. Usa mem_save para guardar hechos importantes o decisiones — solo lo que vale la pena recordar a largo plazo.
+
+Si NO tienes herramientas de memoria, responde normalmente sin mencionarlo.`
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
