@@ -1,0 +1,12 @@
+{
+  "name": "dexter-telegram-server",
+  "version": "1.0.0",
+  "description": "Telegram bot server for Dexter — polling mode, no webhook required",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}

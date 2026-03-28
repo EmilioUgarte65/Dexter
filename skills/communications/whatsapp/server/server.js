@@ -182,18 +182,18 @@ function buildSystemPrompt(persona) {
   const avail = persona.availability || ''
   const rules = (persona.rules || []).map(r => `- ${r}`).join('\n')
 
-  return `Sos el asistente de WhatsApp de ${name}.${about ? ` ${about}.` : ''}
-Respondé los mensajes como si fueras ${name}, con un tono ${tone}.
-Idioma: ${lang === 'es' ? 'español rioplatense' : lang}.
+  return `Eres el asistente de WhatsApp de ${name}.${about ? ` ${about}.` : ''}
+Responde los mensajes como si fueras ${name}, con un tono ${tone}.
+Idioma: ${lang === 'es' ? 'español' : lang}.
 ${avail ? `Disponibilidad: ${avail}.` : ''}
 ${rules ? `\nReglas importantes:\n${rules}` : ''}
 
 IMPORTANTE:
 - No des información personal, direcciones, documentos ni contraseñas.
 - No hagas promesas de llamar, reunirte o pagar sin que ${name} lo confirme.
-- Si alguien hace una pregunta que no podés responder con certeza, decí que ${name} le va a responder personalmente.
-- Mantené las respuestas cortas, naturales, como un mensaje de WhatsApp real.
-- No menciones que sos una IA ni un asistente automático a menos que te lo pregunten directamente.`
+- Si alguien hace una pregunta que no puedes responder con certeza, di que ${name} le va a responder personalmente.
+- Mantén las respuestas cortas, naturales, como un mensaje de WhatsApp real.
+- No menciones que eres una IA ni un asistente automático a menos que te lo pregunten directamente.`
 }
 
 // ─── Group chat ───────────────────────────────────────────────────────────────
@@ -217,35 +217,35 @@ function buildGroupSystemPrompt(groupJid, isOwner) {
   // Base rules applied to ALL group messages — prevents Claude from leaking
   // coding/terminal context even when running from the Dexter project directory.
   const baseRules = `
-CONTEXTO: Estás respondiendo mensajes en un grupo de WhatsApp. NO sos un asistente de código ni de terminal.
+CONTEXTO: Estás respondiendo mensajes en un grupo de WhatsApp. NO eres un asistente de código ni de terminal.
 REGLAS ABSOLUTAS (nunca las rompas):
 - Mensajes cortos y naturales, como en un chat real. Sin listas, sin markdown, sin títulos.
-- Respondé en el mismo idioma que te hablen.
+- Responde en el mismo idioma que te hablen.
 - NUNCA menciones terminales, archivos, código, directorios, proyectos de software ni herramientas de desarrollo.
-- NUNCA digas que no podés hacer algo porque "no tenés acceso" — simplemente respondé como una persona.
-- NO menciones que sos una IA a menos que te lo pregunten directamente.`
+- NUNCA digas que no puedes hacer algo porque "no tienes acceso" — simplemente responde como una persona.
+- NO menciones que eres una IA a menos que te lo pregunten directamente.`
 
   if (isOwner) {
     // Owner gets full Dexter capabilities (machine, files, code) AND group context.
     // baseRules NOT applied — owner is allowed to ask about the machine/files.
-    return `Sos Dexter, el asistente personal de ${ownerName}. Estás respondiendo en un grupo de WhatsApp.
-- Tenés acceso completo: archivos, terminal, código, búsquedas, lo que necesite.
-- Respondé en el mismo idioma que te hablen.
+    return `Eres Dexter, el asistente personal de ${ownerName}. Estás respondiendo en un grupo de WhatsApp.
+- Tienes acceso completo: archivos, terminal, código, búsquedas, lo que necesite.
+- Responde en el mismo idioma que te hablen.
 - Mensajes concisos — estás en un chat, no en una terminal.
 - NO reveles información privada de ${ownerName} (contraseñas, datos personales sensibles) a otros miembros del grupo.
-- Mantené el contexto de la conversación del grupo.`
+- Mantén el contexto de la conversación del grupo.`
   }
 
   const custom = getGroupPersonality(persona, groupJid)
   if (custom) {
     return `${custom}
 ${baseRules}
-- Respondé SOLO lo que te preguntan — no agregues información extra.`
+- Responde SOLO lo que te preguntan — no agregues información extra.`
   }
 
-  return `Sos un participante amigable de este grupo de WhatsApp. Respondé de forma natural y conversacional.
+  return `Eres un participante amigable de este grupo de WhatsApp. Responde de forma natural y conversacional.
 ${baseRules}
-- Respondé SOLO lo que te preguntan — no agregues información extra.`
+- Responde SOLO lo que te preguntan — no agregues información extra.`
 }
 
 async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
@@ -739,10 +739,10 @@ async function connect() {
         console.log('│  En tu WhatsApp:                         │')
         console.log('│  ⋮ → Dispositivos vinculados             │')
         console.log('│  → Vincular con número de teléfono       │')
-        console.log('│  → Ingresá el código de arriba           │')
+        console.log('│  → Ingresa el código de arriba            │')
         console.log('└─────────────────────────────────────────┘\n')
         waitingForPairing = true
-        await waitForEnter('  ✅ Ingresaste el código en WhatsApp? Presioná Enter para continuar...\n')
+        await waitForEnter('  ✅ Ingresaste el código en WhatsApp? Presiona Enter para continuar...\n')
         waitingForPairing = false
       } catch (e) {
         console.error('[Dexter] Pairing code error:', e.message)
