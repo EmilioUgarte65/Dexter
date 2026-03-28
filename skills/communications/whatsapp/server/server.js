@@ -830,6 +830,8 @@ EJECUCIÓN vs CÓDIGO:
   3. Espera confirmación de ${ownerName}.
   4. Ejecuta exactamente lo planeado.
 
+CONTEXTO IMPORTANTE: Estás respondiendo mensajes de WhatsApp. Ya estás conectado vía Baileys — NO necesitás configurar notificaciones ni vinculación. La conexión está activa y funcionando.
+
 ENVIAR IMÁGENES POR WHATSAPP — REGLA OBLIGATORIA:
 - Cuando te pidan una imagen, screenshot, o archivo visual: capturá o localizá el archivo y respondé con el token:
   [SEND_IMAGE:/ruta/al/archivo.png]
@@ -992,8 +994,12 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
     console.warn('[Dexter] Screenshot capture failed — falling through to Claude')
   }
 
-  // Webcam capture
-  if (/(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda|captura|toma\s+una?|saca\s+una?|foto\s+de\s+la|imagen\s+de\s+la)\s*(la\s+)?(c[aá]mara|webcam)|(c[aá]mara|webcam).*(foto|imagen|captura|muestra|env[ií]a|manda|toma)/i.test(incomingText)) {
+  // Webcam capture — also triggers on "webcam" alone or "mándamelo/enviamelo" when history mentions camera
+  const recentHistory = (chatHistory.get(senderJid) || []).slice(-3).map(h => h.text).join(' ')
+  const followUpSend  = /^(env[ií]a?me(lo)?|manda?me(lo)?|manda(lo)?|env[ií]a(lo)?|s[ií]|ok|dale|listo|mand[áa](me)?lo)[\s!.]*$/i.test(incomingText.trim())
+    && /c[aá]mara|webcam/i.test(recentHistory)
+  if (/^webcam$/i.test(incomingText.trim()) || followUpSend
+    || /(muéstrame|muestrame|env[ií]a?me|manda?me|muestra|env[ií]a|manda|captura|toma\s+una?|saca\s+una?|foto\s+de\s+la|imagen\s+de\s+la)\s*(la\s+)?(c[aá]mara|webcam)|(c[aá]mara|webcam).*(foto|imagen|captura|muestra|env[ií]a|manda|toma)/i.test(incomingText)) {
     console.log(`[Dexter] Webcam shortcut triggered`)
     const camPath = await captureWebcam()
     if (camPath) {
@@ -1009,6 +1015,27 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
       return
     }
     console.warn('[Dexter] Webcam capture failed — falling through to Claude')
+  }
+
+  // Webcam describe — capture frame and pass to Claude vision so it can actually analyze it
+  if (/(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|qu[eé]\s+se\s+ve|analiza|mira|observa).*(c[aá]mara|webcam)|(c[aá]mara|webcam).*(describe|escribe|qu[eé]\s+hay|qu[eé]\s+ves|analiza)/i.test(incomingText)) {
+    console.log(`[Dexter] Webcam-describe shortcut triggered`)
+    const camPath = await captureWebcam()
+    if (camPath && cli) {
+      const response = await runLLMCliWithImage(cli, incomingText, camPath)
+      try { fs.unlinkSync(camPath) } catch (_) {}
+      if (response) {
+        if (!useEngram) {
+          appendHistory(senderJid, 'user', incomingText)
+          appendHistory(senderJid, 'assistant', response)
+        }
+        const sent = await sock.sendMessage(senderJid, { text: response })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+        logMessage({ direction: 'out', to: senderPhone, text: response, tier: 'allowed-llm' })
+      }
+      return
+    }
+    console.warn('[Dexter] Webcam-describe failed — falling through to Claude')
   }
 
   // Last image in Downloads
