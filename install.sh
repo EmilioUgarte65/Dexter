@@ -30,13 +30,6 @@ done
 NODE_AVAILABLE=false
 command -v node &>/dev/null && NODE_AVAILABLE=true
 
-if [[ "$NODE_AVAILABLE" == false ]]; then
-  warn "Node.js not found. Steps that require JSON merging will be skipped."
-  warn "Install Node.js to enable full installation: https://nodejs.org"
-  warn "Affected: JSONMerge and MCPConfigFile strategies (opencode, cursor)"
-  echo ""
-fi
-
 # ─── OS Detection ──────────────────────────────────────────────────────────────
 detect_os() {
   if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -257,31 +250,10 @@ setup_whatsapp() {
     return
   fi
 
-  # Node.js is only installed if the user confirmed WhatsApp setup above.
-  # Supports brew (macOS), apt (Debian/Ubuntu), dnf (Fedora), pacman (Arch).
-  # Falls back to a manual install message if no supported package manager is found.
+  # Node.js guaranteed by install_dependencies (Step 4) — skip if still missing
   if [[ "$NODE_AVAILABLE" == false ]]; then
-    info "  Node.js is required for WhatsApp. Installing..."
-    local os
-    os=$(detect_os)
-    if [[ "$os" == "macos" ]] && command -v brew &>/dev/null; then
-      brew install node && NODE_AVAILABLE=true
-    elif [[ "$os" == "linux" ]]; then
-      if command -v apt-get &>/dev/null; then
-        sudo apt-get install -y nodejs npm && NODE_AVAILABLE=true
-      elif command -v dnf &>/dev/null; then
-        sudo dnf install -y nodejs && NODE_AVAILABLE=true
-      elif command -v pacman &>/dev/null; then
-        sudo pacman -S --noconfirm nodejs npm && NODE_AVAILABLE=true
-      fi
-    fi
-    if [[ "$NODE_AVAILABLE" == false ]]; then
-      warn "  Could not install Node.js automatically."
-      info "  Install it manually from: https://nodejs.org"
-      info "  Then run: bash $server_dir/start.sh"
-      return
-    fi
-    success "  Node.js installed."
+    warn "  Node.js not available — skipping WhatsApp setup."
+    return
   fi
 
   info "Installing WhatsApp server dependencies..."
@@ -377,6 +349,62 @@ setup_webhooks() {
       success "  Created: $router_file"
       info "  Edit $router_file to set your preferred providers and API keys."
     fi
+  fi
+}
+
+# ─── Dependency installer ───────────────────────────────────────────────────────
+install_dependencies() {
+  [[ "$DRY_RUN" == true ]] && { info "[dry-run] Would install Node.js and Engram"; return; }
+  local os
+  os=$(detect_os)
+
+  # Node.js — required for WhatsApp server, MCP JSON merging, and npm packages
+  if [[ "$NODE_AVAILABLE" == false ]]; then
+    info "Installing Node.js (required for WhatsApp server and MCP tooling)..."
+    if [[ "$os" == "macos" ]] && command -v brew &>/dev/null; then
+      brew install node && NODE_AVAILABLE=true
+    elif [[ "$os" == "linux" ]]; then
+      if command -v apt-get &>/dev/null; then
+        sudo apt-get install -y nodejs npm && NODE_AVAILABLE=true
+      elif command -v dnf &>/dev/null; then
+        sudo dnf install -y nodejs && NODE_AVAILABLE=true
+      elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm nodejs npm && NODE_AVAILABLE=true
+      fi
+    fi
+    if [[ "$NODE_AVAILABLE" == true ]]; then
+      success "  Node.js installed: $(node --version)"
+    else
+      warn "  Could not install Node.js automatically. Install manually: https://nodejs.org"
+    fi
+  else
+    success "  Node.js already installed: $(node --version)"
+  fi
+
+  # Engram — persistent cross-session memory (SQLite + FTS5 MCP server)
+  if ! command -v engram &>/dev/null; then
+    info "Installing Engram (persistent memory for Dexter — required for cross-session context)..."
+    local installed=false
+    if [[ "$os" == "macos" ]] && command -v brew &>/dev/null; then
+      brew install engram && installed=true
+    elif [[ "$os" == "linux" ]] && command -v brew &>/dev/null; then
+      brew install engram && installed=true
+    fi
+
+    if [[ "$installed" == false ]] && command -v go &>/dev/null; then
+      info "  brew not available — trying Go install..."
+      go install github.com/nicholasgasior/engram@latest && installed=true
+    fi
+
+    if [[ "$installed" == true ]]; then
+      success "  Engram installed: $(engram --version 2>&1)"
+    else
+      warn "  Could not install Engram automatically."
+      warn "  Install manually: brew install engram  OR  go install github.com/nicholasgasior/engram@latest"
+      warn "  Without Engram, Dexter loses memory between sessions."
+    fi
+  else
+    success "  Engram already installed: $(engram --version 2>&1)"
   fi
 }
 
@@ -556,33 +584,23 @@ main() {
   header "Step 3b: Notifications Config"
   setup_notifications
 
-  header "Step 3c: WhatsApp Server (optional)"
-  setup_whatsapp
-
-  header "Step 3d: Webhooks & LLM Router"
+  header "Step 3c: Webhooks & LLM Router"
   setup_webhooks
 
-  header "Step 4: MCPs"
+  header "Step 4: Dependencies (Node.js + Engram)"
+  install_dependencies
+
+  header "Step 5: MCPs"
   configure_mcps "$agent" "$SETTINGS_FILE" "$SETTINGS_STRATEGY"
 
-  header "Step 5: Overlay (hooks + permissions)"
+  header "Step 6: WhatsApp Server"
+  setup_whatsapp
+
+  header "Step 7: Overlay (hooks + permissions)"
   apply_overlay "$agent" "$SETTINGS_FILE"
 
-  header "Step 6: Verify"
+  header "Step 8: Verify"
   verify_install "$SYSTEM_PROMPT_FILE" "$SKILLS_DIR"
-
-  # Inform the user about Engram only if it's not already installed.
-  # Engram enables persistent cross-session memory. Without it, Dexter works
-  # but forgets everything between sessions.
-  if ! command -v engram &>/dev/null; then
-    echo ""
-    echo -e "${BOLD}💾 Persistent Memory (Engram)${RESET}"
-    echo -e "  Dexter can remember decisions, bugs, and conventions across sessions."
-    echo -e "  To enable it, install Engram:"
-    echo -e "    • macOS/Linux: ${BOLD}brew install engram${RESET}"
-    echo -e "    • Any platform: ${BOLD}go install github.com/nicholasgasior/engram@latest${RESET} (requires Go)"
-    echo -e "  Without Engram, Dexter works fine — but starts fresh every session."
-  fi
 
   echo ""
   header "Dexter installed successfully!"

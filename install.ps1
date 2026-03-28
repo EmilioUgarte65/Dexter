@@ -273,6 +273,68 @@ args = ["-y", "@upstash/context7-mcp"]
   }
 }
 
+# ─── Dependency installer ──────────────────────────────────────────────────────
+function Install-Dependencies {
+  if ($DryRun) { Info "[dry-run] Would install Node.js and Engram"; return }
+
+  # Node.js — required for WhatsApp server, MCP JSON merging, and npm packages
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+    Info "Installing Node.js (required for WhatsApp server and MCP tooling)..."
+    try {
+      winget install OpenJS.NodeJS --silent --accept-package-agreements --accept-source-agreements
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                  [System.Environment]::GetEnvironmentVariable("Path","User")
+      if (Get-Command node -ErrorAction SilentlyContinue) {
+        Success "  Node.js installed: $(node --version)"
+      } else {
+        Warn "  Node.js installed but not yet in PATH — restart your terminal if needed."
+      }
+    } catch {
+      Warn "  Could not install Node.js via winget. Install manually: https://nodejs.org"
+    }
+  } else {
+    Success "  Node.js already installed: $(node --version)"
+  }
+
+  # Engram — persistent cross-session memory (SQLite + FTS5 MCP server)
+  if (-not (Get-Command engram -ErrorAction SilentlyContinue)) {
+    Info "Installing Engram (persistent memory for Dexter — required for cross-session context)..."
+    $installed = $false
+    try {
+      winget install engram --silent --accept-package-agreements --accept-source-agreements
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                  [System.Environment]::GetEnvironmentVariable("Path","User")
+      if (Get-Command engram -ErrorAction SilentlyContinue) {
+        Success "  Engram installed: $(engram --version 2>&1)"
+        $installed = $true
+      }
+    } catch {}
+
+    if (-not $installed) {
+      # Fallback: install via Go if available
+      if (Get-Command go -ErrorAction SilentlyContinue) {
+        Info "  winget failed — trying Go install..."
+        go install github.com/nicholasgasior/engram@latest
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path","User") + ";" +
+                    "$env:USERPROFILE\go\bin"
+        if (Get-Command engram -ErrorAction SilentlyContinue) {
+          Success "  Engram installed via Go"
+          $installed = $true
+        }
+      }
+    }
+
+    if (-not $installed) {
+      Warn "  Could not install Engram automatically."
+      Warn "  Install manually: winget install engram  OR  go install github.com/nicholasgasior/engram@latest"
+      Warn "  Without Engram, Dexter loses memory between sessions."
+    }
+  } else {
+    Success "  Engram already installed: $(engram --version 2>&1)"
+  }
+}
+
 # ─── WhatsApp server setup ─────────────────────────────────────────────────────
 function Setup-WhatsApp {
   $serverDir = Join-Path $PSScriptRoot "skills\communications\whatsapp\server"
@@ -287,19 +349,10 @@ function Setup-WhatsApp {
     return
   }
 
-  # Install Node.js via winget if missing — required to run the WhatsApp server
+  # Node.js is guaranteed by Install-Dependencies (Step 5) — no need to re-check here
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-    Info "  Node.js is required for WhatsApp. Installing via winget..."
-    try {
-      winget install OpenJS.NodeJS --silent --accept-package-agreements --accept-source-agreements
-      # Refresh PATH so node is available in this session
-      $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                  [System.Environment]::GetEnvironmentVariable("Path","User")
-    } catch {
-      Warn "  Could not install Node.js automatically."
-      Info "  Install it manually from: https://nodejs.org"
-      return
-    }
+    Warn "  Node.js not found even after dependency install — skipping WhatsApp setup."
+    return
   }
 
   # Install npm dependencies
@@ -403,24 +456,14 @@ Copy-Skills -SkillsDir $paths.SkillsDir
 Write-Host "`nStep 4: MCPs" -ForegroundColor Blue
 Configure-MCPs -Paths $paths -AgentName $detectedAgent
 
-Write-Host "`nStep 5: WhatsApp Server" -ForegroundColor Blue
+Write-Host "`nStep 5: Dependencies (Node.js + Engram)" -ForegroundColor Blue
+Install-Dependencies
+
+Write-Host "`nStep 6: WhatsApp Server" -ForegroundColor Blue
 Setup-WhatsApp
 
-Write-Host "`nStep 6: WSL2 Bridge" -ForegroundColor Blue
+Write-Host "`nStep 7: WSL2 Bridge" -ForegroundColor Blue
 Setup-WSL2Bridge
-
-# Inform the user about Engram only if it's not already installed.
-# Engram enables persistent cross-session memory. Without it, Dexter works
-# but forgets everything between sessions.
-if (-not (Get-Command engram -ErrorAction SilentlyContinue)) {
-  Write-Host ""
-  Write-Host "💾 Persistent Memory (Engram)" -ForegroundColor White
-  Info "  Dexter can remember decisions, bugs, and conventions across sessions."
-  Info "  To enable it, install Engram:"
-  Info "    • Windows (winget): winget install engram"
-  Info "    • Any platform:     go install github.com/nicholasgasior/engram@latest (requires Go)"
-  Info "  Without Engram, Dexter works fine — but starts fresh every session."
-}
 
 Write-Host ""
 Success "Dexter v$DexterVersion installed successfully!"
