@@ -471,7 +471,7 @@ function runLLMCliWithImage(cli, prompt, imagePath) {
     const spawnEnv = { ...process.env }
     delete spawnEnv.CLAUDECODE
     const args = ['-p', prompt, '--image', imagePath, '--dangerously-skip-permissions']
-    const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv })
+    const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv, shell: process.platform === 'win32' })
     const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] Image LLM timed out'); resolve(null) }, 120000)
     child.stdout.on('data', d => { stdout += d.toString() })
     child.stderr.on('data', d => { stderr += d.toString() })
@@ -499,6 +499,7 @@ function runLLMCli(cli, message) {
       stdio: ['ignore', 'pipe', 'pipe'],
       cwd: dexterRoot,
       env: spawnEnv,
+      shell: process.platform === 'win32',
     })
 
     const timer = setTimeout(() => {
