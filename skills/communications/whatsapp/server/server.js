@@ -871,10 +871,14 @@ async function connect() {
         if (isOwner) {
           if (/^dexter\s+join$/i.test(groupText.trim())) {
             const groups = persona.allowedGroups || []
+            console.log(`[Dexter] group join — already in list: ${groups.includes(groupJid)}`)
             if (!groups.includes(groupJid)) {
               persona.allowedGroups = [...groups, groupJid]
-              savePersona(persona)
-              await sock.sendMessage(groupJid, { text: '✅ Dexter activado en este grupo.' })
+              try { savePersona(persona) } catch (e) { console.error('[Dexter] savePersona error:', e.message) }
+              try {
+                await sock.sendMessage(groupJid, { text: '✅ Dexter activado en este grupo.' })
+                console.log(`[Dexter] group join — sent activation message`)
+              } catch (e) { console.error('[Dexter] sendMessage error:', e.message) }
             }
             continue
           }
