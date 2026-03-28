@@ -631,7 +631,7 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
     const dexterRoot = path.resolve(__dirname, '../../../..')
     const response = await new Promise((resolve) => {
       let stdout = '', stderr = ''
-      const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv })
+      const child = spawn(cli, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd: dexterRoot, env: spawnEnv, shell: process.platform === 'win32' })
       const timer = setTimeout(() => { child.kill('SIGTERM'); console.error('[Dexter] LLM timed out'); resolve(null) }, 120000)
       child.stdout.on('data', d => { stdout += d.toString() })
       child.stderr.on('data', d => { stderr += d.toString() })
