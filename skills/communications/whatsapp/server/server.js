@@ -628,7 +628,8 @@ async function downloadAudio(msg) {
     }
     const { downloadMediaMessage } = require('@whiskeysockets/baileys')
     const buffer = await downloadMediaMessage(msg, 'buffer', {}, { logger: { info: () => {}, error: () => {} } })
-    if (!buffer || buffer.length === 0) return null
+    if (!buffer || buffer.length === 0) { console.warn('[Dexter] Audio download: empty buffer'); return null }
+    console.log(`[Dexter] Audio download: ${buffer.length} bytes`)
     const file = path.join(os.tmpdir(), `dexter-audio-${Date.now()}.ogg`)
     fs.writeFileSync(file, buffer)
     return file
@@ -664,6 +665,7 @@ async function transcribeAudio(filePath) {
       try {
         const text = fs.readFileSync(txtPath, 'utf8').trim()
         try { fs.unlinkSync(txtPath) } catch (_) {}
+        if (!text) console.warn('[Dexter] Whisper txt empty. stderr:', stderr.slice(-200))
         resolve(text || null)
       } catch (e) { resolve(null) }
     })
