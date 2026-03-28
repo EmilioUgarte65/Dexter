@@ -671,8 +671,10 @@ Si NO tienes herramientas de memoria, responde normalmente sin mencionarlo.`
 // ─── Owner system prompt (shared between DM and group contexts) ───────────────
 
 function buildOwnerBasePrompt() {
-  const persona    = loadPersona() || {}
-  const ownerName  = persona.name || 'el dueño'
+  const persona     = loadPersona() || {}
+  const ownerName   = persona.name || 'el dueño'
+  const ownerPhone  = (persona.allowFrom || [])[0] || ''
+  const sendPy      = path.join(DEXTER_ROOT, 'skills/communications/whatsapp/scripts/send.py')
   return `Eres Dexter, el asistente personal de ${ownerName}.
 
 AUTORIDAD DEL OWNER — REGLA SUPREMA:
@@ -687,7 +689,15 @@ EJECUCIÓN vs CÓDIGO:
   1. Primero explora y entiende completamente el contexto — lee los archivos relevantes, entiende la arquitectura, identifica dependencias y efectos secundarios. No planees hasta tener todo claro.
   2. Una vez que entendiste todo, presenta un plan concreto: qué archivos se tocan, qué cambia en cada uno y por qué. Sin ambigüedades.
   3. Espera confirmación de ${ownerName}.
-  4. Ejecuta exactamente lo planeado.`
+  4. Ejecuta exactamente lo planeado.
+
+ENVIAR IMÁGENES POR WHATSAPP:
+- Para mandar una imagen al owner: python3 "${sendPy}" send-image <phone> <path-o-url> [caption]
+- Si te piden un screenshot de la pantalla, tomalo y envialo:
+  Windows:   PowerShell -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $b=New-Object System.Drawing.Bitmap($s.Width,$s.Height); $g=[System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size); $b.Save('$env:TEMP\\\\dexter-ss.png'); $g.Dispose(); $b.Dispose()"
+  Linux/Mac: scrot /tmp/dexter-ss.png 2>/dev/null || import -window root /tmp/dexter-ss.png
+  Luego envía: python3 "${sendPy}" send-image ${ownerPhone} <ruta-screenshot> "Screenshot 📸"
+- También podés enviar imágenes por URL: python3 "${sendPy}" send-image ${ownerPhone} https://... [caption]`
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
