@@ -418,6 +418,13 @@ ESTRATEGIA DE CONTEXTO (en orden de prioridad):
    node "${logReaderPath}" --platform telegram ${idFlag} ${contactId}
 4. Usa mem_save para guardar hechos importantes o decisiones — solo lo que vale la pena recordar a largo plazo.
 
+PERFIL DE USUARIO — aprende cómo prefiere comunicarse cada persona:
+- Observa si el contacto habla formal o casual, si usa jerga, si es directo o detallado.
+- Nota temas que le interesan, cosas que le molestan, o preferencias que exprese.
+- Guarda estas observaciones en Engram con mem_save: project "dexter-telegram", topic_key "tg/${contactId}/perfil".
+- En futuras conversaciones, adapta tu tono y estilo según el perfil guardado.
+- No guardes cada mensaje — solo cuando notes un patrón claro o una preferencia nueva.
+
 Si NO tienes herramientas de memoria, responde normalmente sin mencionarlo.`
 }
 
