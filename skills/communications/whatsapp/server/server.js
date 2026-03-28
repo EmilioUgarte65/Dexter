@@ -283,6 +283,41 @@ ${baseRules}
 }
 
 async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
+  // ── Native shortcuts (owner only) — handle image requests without Claude ────
+  if (isOwner) {
+    if (/screenshot|captura\s*de\s*pantalla|foto\s*de\s*(la\s*)?pantalla|manda(me|r).*pantalla|pantalla.*manda/i.test(text)) {
+      console.log(`[Dexter] Group screenshot shortcut triggered`)
+      const ssPath = await takeScreenshot()
+      if (ssPath) {
+        try {
+          const buffer = fs.readFileSync(ssPath)
+          try { fs.unlinkSync(ssPath) } catch (_) {}
+          const sent = await sock.sendMessage(groupJid, { image: buffer, caption: 'Screenshot 📸' })
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          logMessage({ direction: 'out', to: groupJid, text: '[screenshot sent]', tier: 'group' })
+        } catch (e) { console.error('[Dexter] Group screenshot send error:', e.message) }
+        return
+      }
+      console.warn('[Dexter] Screenshot capture failed — falling through to Claude')
+    }
+
+    if (/última\s*imagen|ultimo\s*imagen|last\s*image|(imagen|foto).*(descarga|download)|(descarga|download).*(imagen|foto)/i.test(text)) {
+      console.log(`[Dexter] Group last-image shortcut triggered`)
+      const imgPath = findLastImageInDir(path.join(os.homedir(), 'Downloads'))
+      if (imgPath) {
+        try {
+          const buffer = fs.readFileSync(imgPath)
+          const sent = await sock.sendMessage(groupJid, { image: buffer, caption: path.basename(imgPath) })
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          logMessage({ direction: 'out', to: groupJid, text: `[image sent: ${imgPath}]`, tier: 'group' })
+        } catch (e) { console.error('[Dexter] Group last-image send error:', e.message) }
+        return
+      }
+      console.warn('[Dexter] No images in Downloads — falling through to Claude')
+    }
+  }
+  // ────────────────────────────────────────────────────────────────────────────
+
   const systemPrompt = buildGroupSystemPrompt(groupJid, isOwner)
   const cli = detectLLMCli()
 
