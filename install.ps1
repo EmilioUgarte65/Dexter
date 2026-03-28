@@ -309,6 +309,10 @@ function Setup-WhatsApp {
   Pop-Location
   Success "  Dependencies installed."
 
+  # Pairing method
+  $pairingMethod = Read-Host "[Dexter] Pairing method: (1) QR code  (2) Phone number [1]"
+  $useQR = $pairingMethod -ne "2"
+
   # Save phone number to notifications config
   $phone = Read-Host "[Dexter] Your phone number for notifications (e.g. +5491112345678)"
   $configFile = Join-Path $env:USERPROFILE ".dexter\notifications.json"
@@ -327,7 +331,8 @@ function Setup-WhatsApp {
   Info "  Registering WhatsApp server as a background Task Scheduler task..."
   $nodePath = (Get-Command node).Source
   $serverJs = Join-Path $serverDir "server.js"
-  $action   = New-ScheduledTaskAction -Execute $nodePath -Argument "`"$serverJs`"" -WorkingDirectory $serverDir
+  $nodeArgs  = if ($useQR) { "`"$serverJs`" --qr" } else { "`"$serverJs`"" }
+  $action   = New-ScheduledTaskAction -Execute $nodePath -Argument $nodeArgs -WorkingDirectory $serverDir
   $trigger  = New-ScheduledTaskTrigger -AtLogOn
   $settings = New-ScheduledTaskSettingsSet -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
                 -ExecutionTimeLimit ([TimeSpan]::Zero)
@@ -337,6 +342,9 @@ function Setup-WhatsApp {
   Success "  Task registered and started. Runs automatically at every login."
   Info "  Manage: Task Scheduler → 'Dexter WhatsApp Server'"
   Info "  Logs:   $env:USERPROFILE\.dexter\whatsapp-server.log"
+  if ($useQR) {
+    Info "  First run: open Task Scheduler → run 'Dexter WhatsApp Server' → scan the QR in the terminal."
+  }
 }
 
 # ─── WSL2 bridge ───────────────────────────────────────────────────────────────
