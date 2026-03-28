@@ -656,8 +656,9 @@ async function transcribeAudio(filePath) {
     let stderr = ''
     child.stderr.on('data', d => { stderr += d.toString() })
     child.on('close', code => {
+      console.log(`[Dexter] Whisper exit code=${code} stderr=${stderr.length}b`)
+      if (stderr.trim()) console.log('[Dexter] Whisper stderr:', stderr.slice(-400))
       if (code !== 0) {
-        console.error('[Dexter] Whisper error:', stderr.slice(-300))
         return resolve(null)
       }
       const base    = path.basename(filePath, path.extname(filePath))
@@ -665,9 +666,12 @@ async function transcribeAudio(filePath) {
       try {
         const text = fs.readFileSync(txtPath, 'utf8').trim()
         try { fs.unlinkSync(txtPath) } catch (_) {}
-        if (!text) console.warn('[Dexter] Whisper txt empty. stderr:', stderr.slice(-200))
+        console.log(`[Dexter] Whisper transcript: "${text.substring(0, 100)}"`)
         resolve(text || null)
-      } catch (e) { resolve(null) }
+      } catch (e) {
+        console.error('[Dexter] Whisper txt not found:', txtPath, e.message)
+        resolve(null)
+      }
     })
     child.on('error', e => { console.error('[Dexter] Whisper spawn error:', e.message); resolve(null) })
   })
