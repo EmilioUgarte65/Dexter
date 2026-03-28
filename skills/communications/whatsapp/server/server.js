@@ -301,6 +301,22 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
       console.warn('[Dexter] Screenshot capture failed — falling through to Claude')
     }
 
+    if (/c[aá]mara|webcam|c[aá]mera|what.*cam|cam.*shot/i.test(text)) {
+      console.log(`[Dexter] Group webcam shortcut triggered`)
+      const camPath = await captureWebcam()
+      if (camPath) {
+        try {
+          const buffer = fs.readFileSync(camPath)
+          try { fs.unlinkSync(camPath) } catch (_) {}
+          const sent = await sock.sendMessage(groupJid, { image: buffer, caption: '📷 Webcam' })
+          if (sent?.key?.id) trackSentId(sent.key.id)
+          logMessage({ direction: 'out', to: groupJid, text: '[webcam sent]', tier: 'group' })
+        } catch (e) { console.error('[Dexter] Group webcam send error:', e.message) }
+        return
+      }
+      console.warn('[Dexter] Group webcam capture failed — falling through to Claude')
+    }
+
     if (/última\s*imagen|ultimo\s*imagen|last\s*image|(imagen|foto).*(descarga|download)|(descarga|download).*(imagen|foto)/i.test(text)) {
       console.log(`[Dexter] Group last-image shortcut triggered`)
       const imgPath = findLastImageInDir(path.join(os.homedir(), 'Downloads'))
@@ -869,6 +885,26 @@ async function takeScreenshot() {
   }
 }
 
+// Captures a single frame from the default webcam using Python + OpenCV.
+// Returns the saved file path or null.
+async function captureWebcam() {
+  const py = detectPython()
+  if (!py) return null
+  const outPath = path.join(os.tmpdir(), `dexter-cam-${Date.now()}.jpg`)
+  const script = [
+    'import cv2, sys',
+    'cap = cv2.VideoCapture(0)',
+    'ret, frame = cap.read()',
+    'cap.release()',
+    `cv2.imwrite(r'${outPath.replace(/\\/g, '\\\\')}', frame) if ret else sys.exit(1)`,
+  ].join('; ')
+  return new Promise((resolve) => {
+    const child = spawn(py, ['-c', script], { windowsHide: true, stdio: 'ignore' })
+    child.on('close', code => resolve(code === 0 && fs.existsSync(outPath) ? outPath : null))
+    child.on('error', () => resolve(null))
+  })
+}
+
 // Returns the most recently modified image file in ~/Downloads, or null.
 function findLastImageInDir(dir) {
   const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.avif'])
@@ -953,6 +989,24 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
     }
     // If screenshot fails, fall through to Claude
     console.warn('[Dexter] Screenshot capture failed — falling through to Claude')
+  }
+
+  // Webcam capture
+  if (/c[aá]mara|webcam|c[aá]mera|what.*cam|cam.*shot/i.test(incomingText)) {
+    console.log(`[Dexter] Webcam shortcut triggered`)
+    const camPath = await captureWebcam()
+    if (camPath) {
+      try {
+        const buffer = fs.readFileSync(camPath)
+        try { fs.unlinkSync(camPath) } catch (_) {}
+        const sent = await sock.sendMessage(senderJid, { image: buffer, caption: '📷 Webcam' })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+        logMessage({ direction: 'out', to: senderPhone, text: '[webcam sent]', tier: 'allowed-llm' })
+        console.log(`[Dexter] → ${senderPhone}: [webcam sent]`)
+      } catch (e) { console.error('[Dexter] Webcam send error:', e.message) }
+      return
+    }
+    console.warn('[Dexter] Webcam capture failed — falling through to Claude')
   }
 
   // Last image in Downloads
