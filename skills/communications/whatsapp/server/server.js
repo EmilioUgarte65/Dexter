@@ -692,12 +692,9 @@ EJECUCIÓN vs CÓDIGO:
   4. Ejecuta exactamente lo planeado.
 
 ENVIAR IMÁGENES POR WHATSAPP:
-- Para mandar una imagen al owner: python3 "${sendPy}" send-image <phone> <path-o-url> [caption]
-- Si te piden un screenshot de la pantalla, tomalo y envialo:
-  Windows:   PowerShell -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $b=New-Object System.Drawing.Bitmap($s.Width,$s.Height); $g=[System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size); $b.Save('$env:TEMP\\\\dexter-ss.png'); $g.Dispose(); $b.Dispose()"
-  Linux/Mac: scrot /tmp/dexter-ss.png 2>/dev/null || import -window root /tmp/dexter-ss.png
-  Luego envía: python3 "${sendPy}" send-image ${ownerPhone} <ruta-screenshot> "Screenshot 📸"
-- También podés enviar imágenes por URL: python3 "${sendPy}" send-image ${ownerPhone} https://... [caption]`
+- Comando para enviar imagen al owner: python3 "${sendPy}" send-image ${ownerPhone} <ruta-o-url> [caption]
+- Si te piden un screenshot: capturá la pantalla con las herramientas del sistema (PowerShell en Windows, scrot o import en Linux/Mac), guardá el archivo en un path temporal, y luego envialo con send-image.
+- También podés enviar imágenes desde URL directamente.`
 }
 
 // ─── Owner handler ────────────────────────────────────────────────────────────
