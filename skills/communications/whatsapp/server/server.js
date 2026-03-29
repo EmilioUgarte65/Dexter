@@ -653,7 +653,7 @@ async function transcribeAudio(filePath) {
   if (!py) { console.warn('[Dexter] Python not found — cannot transcribe audio'); return null }
   return new Promise((resolve) => {
     const outDir = os.tmpdir()
-    // shell:true avoids AssignProcessToJobObject error 87 on Windows/PM2
+    // stdio:'ignore' avoids AssignProcessToJobObject error 87 on Windows/PM2 (piped stdio triggers it)
     const child = spawn(py, [
       '-m', 'whisper', filePath,
       '--model', 'base',
@@ -661,15 +661,9 @@ async function transcribeAudio(filePath) {
       '--output_dir', outDir,
       '--device', 'cpu',
       '--fp16', 'False',
-    ], { stdio: ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32' })
-    let stderr = ''
-    child.stderr.on('data', d => { stderr += d.toString() })
+    ], { stdio: 'ignore' })
     child.on('close', code => {
-      console.log(`[Dexter] Whisper exit code=${code} stderr=${stderr.length}b`)
-      if (stderr.trim()) console.log('[Dexter] Whisper stderr:', stderr.slice(-400))
-      if (code !== 0) {
-        return resolve(null)
-      }
+      console.log(`[Dexter] Whisper exit code=${code}`)
       const base    = path.basename(filePath, path.extname(filePath))
       const txtPath = path.join(outDir, `${base}.txt`)
       try {
@@ -678,7 +672,7 @@ async function transcribeAudio(filePath) {
         console.log(`[Dexter] Whisper transcript: "${text.substring(0, 100)}"`)
         resolve(text || null)
       } catch (e) {
-        console.error('[Dexter] Whisper txt not found:', txtPath, e.message)
+        console.error('[Dexter] Whisper txt not found (exit code ' + code + '):', e.message)
         resolve(null)
       }
     })
