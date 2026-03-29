@@ -3,12 +3,12 @@
  * Dexter Log Reader — reads conversation logs filtered by contact or group
  *
  * Usage:
- *   node read-logs.js --platform whatsapp --contact +5218337587196
- *   node read-logs.js --platform whatsapp --group 120363425214480165@g.us
- *   node read-logs.js --platform telegram --contact 8601362723
- *   node read-logs.js --platform telegram --group -1001234567890
- *   node read-logs.js --platform whatsapp --contact +5218337587196 --limit 10
- *   node read-logs.js --platform whatsapp --contact +5218337587196 --today false
+ *   node read-logs.js --platform whatsapp --contact +521XXXXXXXXXX
+ *   node read-logs.js --platform whatsapp --group 120363XXXXXXXXXX@g.us
+ *   node read-logs.js --platform telegram --contact XXXXXXXXX
+ *   node read-logs.js --platform telegram --group -XXXXXXXXXXXXX
+ *   node read-logs.js --platform whatsapp --contact +521XXXXXXXXXX --limit 10
+ *   node read-logs.js --platform whatsapp --contact +521XXXXXXXXXX --today false
  *
  * Options:
  *   --platform   whatsapp | telegram (required)

@@ -42,6 +42,22 @@ desktop.ini
 *.log
 logs/
 
+# Node
+node_modules/
+
+# WhatsApp Baileys session (personal credentials — never commit)
+**/whatsapp/auth/
+**/whatsapp/creds.json
+**/whatsapp/pre-key-*.json
+**/whatsapp/session-*.json
+**/whatsapp/sender-key-*.json
+**/whatsapp/app-state-*.json
+
+# Dexter personal config
+whatsapp-persona.json
+notifications.json
+config.json
+
 # External reference repos (cloned locally, not part of Dexter source)
 gentle-ai/
 openclaw/
