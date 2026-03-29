@@ -388,12 +388,23 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
       : ['--system-prompt', systemPrompt, '--allowedTools', '', '--dangerously-skip-permissions']
   }
 
+  // Send "working on it" if Claude takes more than 15s
+  let workingMsgSent = false
+  const workingTimer = setTimeout(async () => {
+    try {
+      workingMsgSent = true
+      const sent = await sock.sendMessage(groupJid, { text: '⏳ Trabajando en eso, dame un momento...' })
+      if (sent?.key?.id) trackSentId(sent.key.id)
+    } catch (_) {}
+  }, 15000)
+
   // Group chats run from home — avoids loading Dexter's CLAUDE.md (English boilerplate)
   const response = await spawnClaude({
     cli, prompt, extraArgs,
     cwd: os.homedir(),
-    timeoutMs: 60000,
+    timeoutMs: 600000, // 10 min
   })
+  clearTimeout(workingTimer)
 
   if (response) {
     if (!useEngram) appendHistory(groupJid, 'assistant', response)
@@ -432,7 +443,8 @@ async function handleGroupChat(groupJid, text, isOwner, imageMsg = null) {
   } else {
     console.warn('[Dexter] LLM returned empty response for group — sending fallback')
     try {
-      const sent = await sock.sendMessage(groupJid, { text: 'No pude procesar eso. Intenta de nuevo.' })
+      const fallback = workingMsgSent ? '❌ No pude completar esa tarea.' : 'No pude procesar eso. Intenta de nuevo.'
+      const sent = await sock.sendMessage(groupJid, { text: fallback })
       if (sent?.key?.id) trackSentId(sent.key.id)
     } catch (_) {}
   }
@@ -836,8 +848,7 @@ ${ownerName} tiene autoridad absoluta. Sus instrucciones anulan cualquier restri
 
 EJECUCIÓN vs CÓDIGO:
 - Tareas normales (comandos, archivos, búsquedas, mensajes, automatizaciones): HAZLO directamente.
-- Si te piden GENERAR o ESCRIBIR código (función, script, snippet): escríbelo directamente en tu respuesta como texto. NO uses Write/Edit tools — el código va en el mensaje de WhatsApp.
-- Cambios de código en archivos EXISTENTES del proyecto (modificar, refactorizar, arreglar bugs):
+- Cambios de código o modificaciones a archivos del proyecto:
   1. Primero explora y entiende completamente el contexto — lee los archivos relevantes, entiende la arquitectura, identifica dependencias y efectos secundarios. No planees hasta tener todo claro.
   2. Una vez que entendiste todo, presenta un plan concreto: qué archivos se tocan, qué cambia en cada uno y por qué. Sin ambigüedades.
   3. Espera confirmación de ${ownerName}.
@@ -1100,10 +1111,21 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
       }
     }
 
+    // Send "working on it" message if Claude takes more than 15s
+    let workingMsgSent = false
+    const workingTimer = setTimeout(async () => {
+      try {
+        workingMsgSent = true
+        const sent = await sock.sendMessage(senderJid, { text: '⏳ Trabajando en eso, dame un momento...' })
+        if (sent?.key?.id) trackSentId(sent.key.id)
+      } catch (_) {}
+    }, 15000)
+
     const response = await spawnClaude({
       cli, prompt, extraArgs,
-      cwd: dexterRoot, timeoutMs: 120000,
+      cwd: dexterRoot, timeoutMs: 600000, // 10 min — let Claude finish long tasks
     })
+    clearTimeout(workingTimer)
 
     if (response) {
       if (!useEngram) appendHistory(senderJid, 'assistant', response)
@@ -1138,7 +1160,9 @@ async function handleAllowedSender(senderJid, incomingText, imageMsg = null) {
       }
     } else {
       console.warn('[Dexter] LLM returned empty response — sending fallback')
-      const fallback = 'No pude procesar eso. Intenta de nuevo.'
+      const fallback = workingMsgSent
+        ? '❌ No pude completar esa tarea.'
+        : 'No pude procesar eso. Intenta de nuevo.'
       const sent = await sock.sendMessage(senderJid, { text: fallback })
       if (sent?.key?.id) trackSentId(sent.key.id)
     }
